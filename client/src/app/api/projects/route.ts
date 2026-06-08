@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id);
 
     if (profileError) {
+      console.error("projects: users update failed", profileError);
       return NextResponse.json({ error: profileError.message }, { status: 500 });
     }
   }
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (projectError) {
+    console.error("projects: insert failed", projectError);
     return NextResponse.json({ error: projectError.message }, { status: 500 });
   }
 

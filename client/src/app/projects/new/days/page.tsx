@@ -4,12 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useProjectSetupStore } from "@/lib/stores/projectSetupStore";
 
+// GoodDayHardDayStep — Step 4 of project creation, Screen 10 from onboarding design
+// Captures projects.good_day_description / projects.hard_day_description — used later by the AI voice
 export default function GoodDayHardDayStep() {
   const router = useRouter();
   const setDayDescriptions = useProjectSetupStore(
     (state) => state.setDayDescriptions
   );
 
+  // goodDay/hardDay — local form state, committed to the store on continue
   const [goodDay, setGoodDay] = useState("");
   const [hardDay, setHardDay] = useState("");
 
@@ -38,11 +41,16 @@ export default function GoodDayHardDayStep() {
         </div>
 
         <div className="flex flex-col gap-5">
+          {/* Good day field — projects.good_day_description */}
           <div className="flex flex-col gap-2">
-            <span className="text-xs text-[#6B6B6B] tracking-wide uppercase">
+            <label
+              htmlFor="good-day"
+              className="text-xs text-[#6B6B6B] tracking-wide uppercase"
+            >
               What does a good day look like for this?
-            </span>
+            </label>
             <textarea
+              id="good-day"
               value={goodDay}
               onChange={(e) => setGoodDay(e.target.value)}
               rows={3}
@@ -51,11 +59,16 @@ export default function GoodDayHardDayStep() {
             />
           </div>
 
+          {/* Hard day field — projects.hard_day_description */}
           <div className="flex flex-col gap-2">
-            <span className="text-xs text-[#6B6B6B] tracking-wide uppercase">
+            <label
+              htmlFor="hard-day"
+              className="text-xs text-[#6B6B6B] tracking-wide uppercase"
+            >
               What does a hard day look like?
-            </span>
+            </label>
             <textarea
+              id="hard-day"
               value={hardDay}
               onChange={(e) => setHardDay(e.target.value)}
               rows={3}
