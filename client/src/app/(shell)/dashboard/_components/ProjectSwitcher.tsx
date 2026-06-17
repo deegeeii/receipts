@@ -1,9 +1,11 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import TaskList from "./TaskList";
 
+// ── TYPES ─────────────────────────────────────────────────────────────────────
 type Task = {
   id: string;
   title: string;
@@ -18,12 +20,14 @@ type Project = {
   end_date: string;
   checkedInToday: boolean;
   tasks: Task[];
+  remaining_balance: number;
 };
 
 type ProjectSwitcherProps = {
   projects: Project[];
 };
 
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function formatCents(cents: number): string {
   return `$${(cents / 100).toLocaleString()}`;
 }
@@ -35,12 +39,17 @@ function daysRemaining(endDate: string): number {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
 
-// ProjectSwitcher — pill selector across active projects (gold = receipt due, green = receipt logged), shows selected project's detail card, check-in CTA, and roadmap
+// ── COMPONENT ─────────────────────────────────────────────────────────────────
+// ProjectSwitcher — pill selector across active projects, detail card, check-in CTA, roadmap
 export default function ProjectSwitcher({ projects }: ProjectSwitcherProps) {
+
+  // ── STATE ───────────────────────────────────────────────────────────────────
   const [selectedId, setSelectedId] = useState(projects[0].id);
 
-  const selected = projects.find((project) => project.id === selectedId) ?? projects[0];
+  const selected =
+    projects.find((project) => project.id === selectedId) ?? projects[0];
 
+  // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-5">
 
@@ -97,6 +106,15 @@ export default function ProjectSwitcher({ projects }: ProjectSwitcherProps) {
               {formatCents(selected.daily_payout)}
             </span>
           </div>
+
+          <div className="flex justify-between items-baseline">
+            <span className="text-xs text-[#6B6B6B] uppercase tracking-wide">
+              Remaining
+            </span>
+            <span className="text-sm font-semibold text-[#F0EDEA]">
+              {formatCents(selected.remaining_balance)}
+            </span>
+          </div>
         </div>
 
         {selected.checkedInToday ? (
@@ -122,10 +140,8 @@ export default function ProjectSwitcher({ projects }: ProjectSwitcherProps) {
           />
         )}
 
-
       </div>
 
     </div>
   );
 }
-

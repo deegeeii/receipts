@@ -1,12 +1,14 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getLevelGroup } from "@/lib/xp/levels";
 import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
 import ProjectSwitcher from "./_components/ProjectSwitcher";
+import SetupPayoutsBanner from "./_components/SetupPayoutsBanner";
 
-
-// DashboardPage — profile stats + switcher across all active projects (roadmap, check-in CTA)
+// ── PAGE ──────────────────────────────────────────────────────────────────────
+// DashboardPage — profile stats + switcher across all active projects
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -18,10 +20,9 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("name, level, xp, current_streak, timezone")
+    .select("name, level, xp, current_streak, timezone, stripe_account_id")
     .eq("id", user.id)
     .single();
-
 
   const levelGroup = getLevelGroup(profile?.level ?? 1);
 
@@ -44,6 +45,7 @@ export default async function DashboardPage() {
     string,
     { id: string; title: string; completed: boolean }[]
   > = {};
+  let releasedByProject: Record<string, number> = {};
 
   if (projectIds.length > 0) {
     const today = getDateInTimezone(new Date(), profile?.timezone ?? "UTC");
@@ -71,18 +73,29 @@ export default async function DashboardPage() {
     if (tasksError) {
       console.error("dashboard: tasks fetch failed", tasksError);
     } else {
-      tasksByProject = (allTasks ?? []).reduce((accumulator, task) => {
-        const existing = accumulator[task.project_id] ?? [];
-        accumulator[task.project_id] = [
+      tasksByProject = (allTasks ?? []).reduce((acc, task) => {
+        const existing = acc[task.project_id] ?? [];
+        acc[task.project_id] = [
           ...existing,
-          {
-            id: task.id,
-            title: task.title,
-            completed: task.completed,
-          },
+          { id: task.id, title: task.title, completed: task.completed },
         ];
-        return accumulator;
+        return acc;
       }, {} as Record<string, { id: string; title: string; completed: boolean }[]>);
+    }
+
+    const { data: releasedPayouts, error: payoutsError } = await supabase
+      .from("payouts")
+      .select("project_id, amount")
+      .in("project_id", projectIds)
+      .eq("status", "released");
+
+    if (payoutsError) {
+      console.error("dashboard: payouts fetch failed", payoutsError);
+    } else {
+      releasedByProject = (releasedPayouts ?? []).reduce((acc, payout) => {
+        acc[payout.project_id] = (acc[payout.project_id] ?? 0) + payout.amount;
+        return acc;
+      }, {} as Record<string, number>);
     }
   }
 
@@ -94,6 +107,8 @@ export default async function DashboardPage() {
     end_date: project.end_date,
     checkedInToday: checkedInProjectIds.has(project.id),
     tasks: tasksByProject[project.id] ?? [],
+    remaining_balance:
+      project.deposit_amount - (releasedByProject[project.id] ?? 0),
   }));
 
   return (
@@ -102,13 +117,19 @@ export default async function DashboardPage() {
 
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold text-[#F0EDEA]">
-            {profile?.name ? `Welcome back, ${profile.name}` : "Welcome back"}
+            {profile?.name
+              ? `Welcome back, ${profile.name}`
+              : "Welcome back"}
           </h1>
           <p className="text-sm text-[#6B6B6B]">
             Level {profile?.level ?? 1} · {levelGroup} · {profile?.xp ?? 0} XP ·{" "}
             {profile?.current_streak ?? 0} day streak
           </p>
         </div>
+
+        {!profile?.stripe_account_id && (
+          <SetupPayoutsBanner />
+        )}
 
         {dashboardProjects.length > 0 ? (
           <ProjectSwitcher projects={dashboardProjects} />

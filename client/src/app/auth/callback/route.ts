@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { stripe } from "@/lib/stripe/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -10,6 +11,34 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("stripe_customer_id")
+          .eq("id", user.id)
+          .single();
+
+        if (profile && !profile.stripe_customer_id) {
+          const customer = await stripe.customers.create({
+            email: user.email,
+            metadata: { supabase_user_id: user.id },
+          });
+
+          const { error: updateError } = await supabase
+            .from("users")
+            .update({ stripe_customer_id: customer.id })
+            .eq("id", user.id);
+
+          if (updateError) {
+            console.error("callback: stripe_customer_id update failed", updateError);
+          }
+        }
+      }
+
       return NextResponse.redirect(
         new URL("/dashboard", process.env.NEXT_PUBLIC_APP_URL)
       );

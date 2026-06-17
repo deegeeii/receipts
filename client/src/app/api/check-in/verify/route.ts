@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getLevelForXp, getLevelGroup } from "@/lib/xp/levels";
 import { formatTaskList } from "@/lib/ai/formatTaskList";
 import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
+import { stripe } from "@/lib/stripe/server";
+
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
@@ -99,12 +101,13 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: profile } = await supabase
-    .from("users")
-    .select(
-      "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available"
-    )
-    .eq("id", user.id)
-    .single();
+  .from("users")
+  .select(
+    "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id"
+  )
+  .eq("id", user.id)
+  .single();
+
 
   if (!profile) {
     console.error("verify: profile not found", { user_id: user.id });
@@ -265,6 +268,37 @@ export async function POST(request: NextRequest) {
     console.error("verify: payouts insert failed", payoutError);
     return NextResponse.json({ error: payoutError.message }, { status: 500 });
   }
+
+  if (profile.stripe_account_id) {
+    try {
+      const transfer = await stripe.transfers.create({
+        amount: project.daily_payout,
+        currency: "usd",
+        destination: profile.stripe_account_id,
+        metadata: {
+          check_in_id: checkIn.id,
+          project_id,
+          user_id: user.id,
+        },
+      });
+
+      const { error: payoutUpdateError } = await supabase
+        .from("payouts")
+        .update({
+          status: "released",
+          stripe_transfer_id: transfer.id,
+        })
+        .eq("check_in_id", checkIn.id);
+
+      if (payoutUpdateError) {
+        console.error("verify: payout status update failed", payoutUpdateError);
+      }
+    } catch (transferError) {
+      console.error("verify: stripe transfer failed", transferError);
+      // payout stays "pending" — will be retried once bank account is linked
+    }
+  }
+
 
   const { error: profileError } = await supabase
     .from("users")

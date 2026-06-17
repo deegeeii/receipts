@@ -1,13 +1,17 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
+import ProjectActions from "./_components/ProjectActions";
 
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function formatCents(cents: number): string {
   return `$${(cents / 100).toLocaleString()}`;
 }
 
-// ProjectsPage — every project for the user, with check-in and history actions
+// ── PAGE ──────────────────────────────────────────────────────────────────────
+// ProjectsPage — every project for the user, with check-in, history, and close actions
 export default async function ProjectsPage() {
   const supabase = await createClient();
 
@@ -20,10 +24,10 @@ export default async function ProjectsPage() {
   }
 
   const { data: profile } = await supabase
-  .from("users")
-  .select("timezone")
-  .eq("id", user.id)
-  .single();
+    .from("users")
+    .select("timezone")
+    .eq("id", user.id)
+    .single();
 
   const { data: projects, error: projectsError } = await supabase
     .from("projects")
@@ -31,13 +35,11 @@ export default async function ProjectsPage() {
     .eq("user_id", user.id)
     .order("deposit_amount", { ascending: false });
 
-
   if (projectsError) {
     console.error("projects: fetch failed", projectsError);
   }
 
   const today = getDateInTimezone(new Date(), profile?.timezone ?? "UTC");
-
 
   const { data: todayCheckIns, error: checkInsError } = await supabase
     .from("check_ins")
@@ -53,6 +55,7 @@ export default async function ProjectsPage() {
     (todayCheckIns ?? []).map((checkIn) => checkIn.project_id)
   );
 
+  // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-[#0A0A0A] px-6 py-12">
       <div className="w-full max-w-2xl mx-auto flex flex-col gap-8">
@@ -82,6 +85,7 @@ export default async function ProjectsPage() {
           <div className="flex flex-col gap-4">
             {projects.map((project) => {
               const checkedInToday = checkedInProjectIds.has(project.id);
+              const isActive = project.status === "active";
 
               return (
                 <div
@@ -116,11 +120,9 @@ export default async function ProjectsPage() {
                   </div>
 
                   <div className="flex gap-3">
-                    {project.status === "active" && (
+                    {isActive && (
                       checkedInToday ? (
-                        <span
-                          className="flex-1 text-center py-3 border border-[#1F1F1F] rounded-md text-sm text-[#2D6A4F] font-semibold"
-                        >
+                        <span className="flex-1 text-center py-3 border border-[#1F1F1F] rounded-md text-sm text-[#2D6A4F] font-semibold">
                           Logged today
                         </span>
                       ) : (
@@ -140,6 +142,11 @@ export default async function ProjectsPage() {
                       History
                     </Link>
                   </div>
+
+                  {isActive && (
+                    <ProjectActions projectId={project.id} />
+                  )}
+
                 </div>
               );
             })}
