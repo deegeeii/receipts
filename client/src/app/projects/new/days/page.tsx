@@ -22,7 +22,8 @@ export default function GoodDayHardDayStep() {
       hard_day_description: hardDay,
     });
 
-    router.push("/projects/new/review");
+    router.push("/projects/new/roadmap");
+
   }
 
   const canContinue = goodDay.trim().length > 0 && hardDay.trim().length > 0;

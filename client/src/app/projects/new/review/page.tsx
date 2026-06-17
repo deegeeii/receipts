@@ -23,6 +23,20 @@ export default function ReviewAndCommitStep() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const canSubmit =
+    setup.deposit_amount !== null &&
+    setup.daily_payout !== null &&
+    setup.title.trim().length > 0 &&
+    setup.description.trim().length > 0 &&
+    setup.start_date !== null &&
+    setup.end_date !== null &&
+    setup.work_style !== null &&
+    setup.obstacle_patterns.length > 0 &&
+    setup.good_day_description.trim().length > 0 &&
+    setup.hard_day_description.trim().length > 0;
+    setup.tasks.length >= 5;
+
+
   async function handleConfirm() {
     setSubmitting(true);
     setError(null);
@@ -41,6 +55,7 @@ export default function ReviewAndCommitStep() {
         obstacle_patterns: setup.obstacle_patterns,
         good_day_description: setup.good_day_description,
         hard_day_description: setup.hard_day_description,
+        tasks: setup.tasks,
       }),
     });
 
@@ -53,6 +68,7 @@ export default function ReviewAndCommitStep() {
     reset();
     router.push("/dashboard");
   }
+
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6 py-12">
@@ -112,11 +128,12 @@ export default function ReviewAndCommitStep() {
 
         <button
           onClick={handleConfirm}
-          disabled={submitting}
+          disabled={submitting || !canSubmit}
           className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {submitting ? "Locking it in..." : "I'm in. Lock it in."}
         </button>
+
 
       </div>
     </main>

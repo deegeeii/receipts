@@ -22,17 +22,19 @@ export default function ProjectBasicsStep() {
 
   function handleContinue() {
     const start_date = new Date().toISOString().slice(0, 10);
-    const end_date = addDays(start_date, duration === "week" ? 7 : 30);
+    const end_date = addDays(start_date, duration === "week" ? 7 : 28);
 
     setBasics({
       title,
       description,
       start_date,
       end_date,
+      duration,
     });
 
-    router.push("/projects/new/quiz");
+    router.push("/projects/new/workweek");
   }
+
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
@@ -116,11 +118,12 @@ export default function ProjectBasicsStep() {
 
         <button
           onClick={handleContinue}
-          disabled={!title.trim()}
+          disabled={!title.trim() || !description.trim()}
           className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Continue
         </button>
+
 
       </div>
     </main>

@@ -19,11 +19,14 @@ export async function POST(request: NextRequest) {
     daily_payout,
     start_date,
     end_date,
+    work_days,
     work_style,
     obstacle_patterns,
     good_day_description,
     hard_day_description,
+    tasks,
   } = body;
+
 
   const { data: profile } = await supabase
     .from("users")
@@ -44,25 +47,47 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .insert({
-      user_id: user.id,
-      title,
-      description,
-      deposit_amount,
-      daily_payout,
-      start_date,
-      end_date,
-      good_day_description,
-      hard_day_description,
-    })
-    .select()
-    .single();
+  .from("projects")
+  .insert({
+    user_id: user.id,
+    title,
+    description,
+    deposit_amount,
+    daily_payout,
+    start_date,
+    end_date,
+    work_days,
+    good_day_description,
+    hard_day_description,
+    status: "active",
+  })
+  .select()
+  .single();
+
 
   if (projectError) {
     console.error("projects: insert failed", projectError);
     return NextResponse.json({ error: projectError.message }, { status: 500 });
   }
+
+  if (tasks && tasks.length > 0) {
+    const taskRows = tasks.map((taskTitle: string, index: number) => ({
+      project_id: project.id,
+      user_id: user.id,
+      title: taskTitle,
+      position: index,
+    }));
+  
+    const { error: tasksError } = await supabase
+      .from("project_tasks")
+      .insert(taskRows);
+  
+    if (tasksError) {
+      console.error("projects: tasks insert failed", tasksError);
+      return NextResponse.json({ error: tasksError.message }, { status: 500 });
+    }
+  }
+  
 
   return NextResponse.json({ project });
 }

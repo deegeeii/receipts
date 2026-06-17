@@ -31,7 +31,7 @@ export function calculateXp({
 }: CalculateXpParams): number {
   const depositTierMultiplier = getDepositTierMultiplier(depositAmountCents);
   const streakMultiplier = getStreakMultiplier(streakDays);
-  const payoutBonus = dailyPayoutCents * PAYOUT_BONUS_RATE;
+  const payoutBonus = (dailyPayoutCents / 100) * PAYOUT_BONUS_RATE;
 
   const xp =
     BASE_XP * depositTierMultiplier * streakMultiplier + payoutBonus;
