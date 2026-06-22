@@ -112,5 +112,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const { error: onboardedError } = await supabase
+  .from("users")
+  .update({ onboarded: true })
+  .eq("id", user.id);
+
+  if (onboardedError) {
+    console.error("projects: onboarded update failed", onboardedError);
+  }
+
   return NextResponse.json({ project });
+
 }

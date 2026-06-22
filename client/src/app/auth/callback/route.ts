@@ -1,7 +1,9 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/server";
 import { NextRequest, NextResponse } from "next/server";
 
+// ── HANDLER ───────────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
@@ -18,7 +20,7 @@ export async function GET(request: NextRequest) {
       if (user) {
         const { data: profile } = await supabase
           .from("users")
-          .select("stripe_customer_id")
+          .select("stripe_customer_id, onboarded")
           .eq("id", user.id)
           .single();
 
@@ -34,9 +36,19 @@ export async function GET(request: NextRequest) {
             .eq("id", user.id);
 
           if (updateError) {
-            console.error("callback: stripe_customer_id update failed", updateError);
+            console.error(
+              "callback: stripe_customer_id update failed",
+              updateError
+            );
           }
         }
+
+        const destination =
+          profile && profile.onboarded ? "/dashboard" : "/onboarding";
+
+        return NextResponse.redirect(
+          new URL(destination, process.env.NEXT_PUBLIC_APP_URL)
+        );
       }
 
       return NextResponse.redirect(
