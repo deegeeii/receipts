@@ -124,7 +124,7 @@ export default function ReviewAndCommitStep() {
   async function handlePaymentSuccess(paymentIntentId: string) {
     setSubmitting(true);
     setSubmitError(null);
-
+  
     const response = await fetch("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -144,18 +144,20 @@ export default function ReviewAndCommitStep() {
         stripe_payment_intent_id: paymentIntentId,
       }),
     });
-
+  
+    const data = await response.json();
+  
     if (!response.ok) {
-      const data = await response.json();
       console.error("review: project create failed", data);
       setSubmitError(data.error ?? "Something went wrong. Try again.");
       setSubmitting(false);
       return;
     }
-
+  
     reset();
-    router.push("/dashboard");
+    router.push(`/onboarding/preview?projectId=${data.project.id}`);
   }
+  
 
   const elementsOptions = {
     clientSecret: clientSecret ?? undefined,
