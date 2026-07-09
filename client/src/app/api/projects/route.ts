@@ -48,9 +48,24 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("work_style")
+    .select("work_style, subscription_tier")
     .eq("id", user.id)
     .single();
+
+  if (profile?.subscription_tier === "standard") {
+    const { count } = await supabase
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "active");
+
+    if (count !== null && count >= 1) {
+      return NextResponse.json(
+        { error: "upgrade_required" },
+        { status: 403 }
+      );
+    }
+  }
 
   if (profile && !profile.work_style) {
     const { error: profileError } = await supabase
@@ -113,14 +128,13 @@ export async function POST(request: NextRequest) {
   }
 
   const { error: onboardedError } = await supabase
-  .from("users")
-  .update({ onboarded: true })
-  .eq("id", user.id);
+    .from("users")
+    .update({ onboarded: true })
+    .eq("id", user.id);
 
   if (onboardedError) {
     console.error("projects: onboarded update failed", onboardedError);
   }
 
   return NextResponse.json({ project });
-
 }

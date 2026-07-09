@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
 // ── HANDLER ───────────────────────────────────────────────────────────────────
-// POST /api/stripe/webhook — handle Stripe events for payout failures and account updates
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const sig = request.headers.get("stripe-signature");
@@ -62,6 +61,52 @@ export async function POST(request: NextRequest) {
       payouts_enabled: account.payouts_enabled,
       charges_enabled: account.charges_enabled,
     });
+  }
+
+  if (
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.created"
+  ) {
+    const subscription = event.data.object as Stripe.Subscription;
+    const priceId = subscription.items.data[0]?.price.id;
+    const customerId = subscription.customer as string;
+
+    const tier =
+      priceId === process.env.STRIPE_PRO_PRICE_ID
+        ? "pro"
+        : "standard";
+
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({ subscription_tier: tier })
+      .eq("stripe_customer_id", customerId);
+
+    if (error) {
+      console.error("webhook: subscription_tier update failed", error);
+    } else {
+      console.log("webhook: subscription synced", {
+        customer_id: customerId,
+        tier,
+      });
+    }
+  }
+
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription;
+    const customerId = subscription.customer as string;
+
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({ subscription_tier: "standard" })
+      .eq("stripe_customer_id", customerId);
+
+    if (error) {
+      console.error("webhook: subscription_tier reset failed", error);
+    } else {
+      console.log("webhook: subscription deleted — tier reset to standard", {
+        customer_id: customerId,
+      });
+    }
   }
 
   return NextResponse.json({ received: true });

@@ -1,61 +1,100 @@
-"use client";
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import DepositSelector from "./_components/DepositSelector";
 
-import { useRouter } from "next/navigation";
-import { useProjectSetupStore } from "@/lib/stores/projectSetupStore";
+// ── PAGE ──────────────────────────────────────────────────────────────────────
+export default async function NewProjectPage() {
+  const supabase = await createClient();
 
-const TIERS = [
-  { amount: 5000, label: "$50", multiplier: "1x" },
-  { amount: 10000, label: "$100", multiplier: "1.5x" },
-  { amount: 25000, label: "$250", multiplier: "2.5x" },
-  { amount: 50000, label: "$500", multiplier: "3.5x" },
-  { amount: 100000, label: "$1,000", multiplier: "5x" },
-];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-export default function NewProjectStepOne() {
-  const router = useRouter();
-  const setDeposit = useProjectSetupStore((state) => state.setDeposit);
-  const deposit_amount = useProjectSetupStore((state) => state.deposit_amount);
+  if (!user) redirect("/auth/login");
 
-  function handleSelect(amount: number) {
-    setDeposit(amount);
-    router.push("/projects/new/basics");
+  const { data: profile } = await supabase
+    .from("users")
+    .select("subscription_tier, level")
+    .eq("id", user.id)
+    .single();
+
+  const tier = profile?.subscription_tier ?? "standard";
+  const level = profile?.level ?? 1;
+  const isJuniorOrAbove = level >= 16;
+
+  const { count } = await supabase
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("status", "active");
+
+  const activeCount = count ?? 0;
+
+  if (activeCount >= 1) {
+    if (tier === "standard") {
+      return (
+        <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
+          <div className="w-full max-w-sm flex flex-col gap-8">
+
+            <div className="flex flex-col gap-3">
+              <h2 className="text-2xl font-bold text-[#F0EDEA]">
+                You&apos;re at your project limit.
+              </h2>
+              <p className="text-sm text-[#6B6B6B] leading-relaxed">
+                Standard plan includes 1 active project. Upgrade to Pro to run
+                multiple projects at once.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Link
+                href="/settings/subscription"
+                className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] transition-colors text-center"
+              >
+                Upgrade to Pro — $20/mo
+              </Link>
+              <Link
+                href="/dashboard"
+                className="w-full py-4 text-[#6B6B6B] text-sm hover:text-[#F0EDEA] transition-colors text-center"
+              >
+                Back to dashboard
+              </Link>
+            </div>
+
+          </div>
+        </main>
+      );
+    }
+
+    if (tier === "pro" && !isJuniorOrAbove) {
+      return (
+        <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
+          <div className="w-full max-w-sm flex flex-col gap-8">
+
+            <div className="flex flex-col gap-3">
+              <h2 className="text-2xl font-bold text-[#F0EDEA]">
+                Keep going.
+              </h2>
+              <p className="text-sm text-[#6B6B6B] leading-relaxed">
+                Multiple projects unlock at Junior (Level 16). You&apos;re at
+                Level {level} — keep checking in to get there.
+              </p>
+            </div>
+
+            <Link
+              href="/dashboard"
+              className="w-full py-4 text-[#6B6B6B] text-sm hover:text-[#F0EDEA] transition-colors text-center"
+            >
+              Back to dashboard
+            </Link>
+
+          </div>
+        </main>
+      );
+    }
   }
 
-  return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
-      <div className="w-full max-w-sm flex flex-col gap-8">
-
-        <div className="flex flex-col gap-1">
-          <h2 className="text-2xl font-bold text-[#F0EDEA]">
-            What&apos;s it worth to you?
-          </h2>
-          <p className="text-sm text-[#6B6B6B]">
-            Higher stakes earn faster XP.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {TIERS.map((tier) => (
-            <button
-              key={tier.amount}
-              onClick={() => handleSelect(tier.amount)}
-              className={`w-full flex items-center justify-between px-5 py-4 rounded-md border text-left transition-colors ${
-                deposit_amount === tier.amount
-                  ? "border-[#C9A84C] bg-[#111111]"
-                  : "border-[#1F1F1F] bg-[#111111] hover:border-[#C9A84C]/50"
-              }`}
-            >
-              <span className="text-lg font-semibold text-[#F0EDEA]">
-                {tier.label}
-              </span>
-              <span className="text-xs text-[#6B6B6B] tracking-wide">
-                {tier.multiplier} XP
-              </span>
-            </button>
-          ))}
-        </div>
-
-      </div>
-    </main>
-  );
+  return <DepositSelector />;
 }

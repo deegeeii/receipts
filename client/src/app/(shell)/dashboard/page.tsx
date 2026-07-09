@@ -6,9 +6,9 @@ import { getLevelGroup } from "@/lib/xp/levels";
 import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
 import ProjectSwitcher from "./_components/ProjectSwitcher";
 import SetupPayoutsBanner from "./_components/SetupPayoutsBanner";
+import OverdueBanner from "./_components/OverdueBanner";
 
 // ── PAGE ──────────────────────────────────────────────────────────────────────
-// DashboardPage — profile stats + switcher across all active projects
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -39,6 +39,7 @@ export default async function DashboardPage() {
 
   const projects = activeProjects ?? [];
   const projectIds = projects.map((project) => project.id);
+  const today = getDateInTimezone(new Date(), profile?.timezone ?? "UTC");
 
   let checkedInProjectIds = new Set<string>();
   let tasksByProject: Record<
@@ -48,8 +49,6 @@ export default async function DashboardPage() {
   let releasedByProject: Record<string, number> = {};
 
   if (projectIds.length > 0) {
-    const today = getDateInTimezone(new Date(), profile?.timezone ?? "UTC");
-
     const { data: todayCheckIns, error: checkInsError } = await supabase
       .from("check_ins")
       .select("project_id")
@@ -105,11 +104,15 @@ export default async function DashboardPage() {
     deposit_amount: project.deposit_amount,
     daily_payout: project.daily_payout,
     end_date: project.end_date,
+    isOverdue: project.end_date < today,
     checkedInToday: checkedInProjectIds.has(project.id),
     tasks: tasksByProject[project.id] ?? [],
     remaining_balance:
       project.deposit_amount - (releasedByProject[project.id] ?? 0),
   }));
+
+  const overdueProjects = dashboardProjects.filter((p) => p.isOverdue);
+  const currentProjects = dashboardProjects.filter((p) => !p.isOverdue);
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] px-6 py-12">
@@ -131,8 +134,21 @@ export default async function DashboardPage() {
           <SetupPayoutsBanner />
         )}
 
-        {dashboardProjects.length > 0 ? (
-          <ProjectSwitcher projects={dashboardProjects} />
+        {overdueProjects.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {overdueProjects.map((project) => (
+              <OverdueBanner
+                key={project.id}
+                projectId={project.id}
+                projectTitle={project.title}
+                currentEndDate={project.end_date}
+              />
+            ))}
+          </div>
+        )}
+
+        {currentProjects.length > 0 ? (
+          <ProjectSwitcher projects={currentProjects} />
         ) : (
           <div className="flex flex-col gap-4 items-center text-center py-10">
             <p className="text-sm text-[#6B6B6B]">
