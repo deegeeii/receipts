@@ -24,9 +24,10 @@ export default async function ShellLayout({
     <div className="flex min-h-screen bg-[#0A0A0A]">
       <TimezoneSync />
       <Sidebar />
-      <div className="flex-1">
+      <div className="flex-1 pb-16 md:pb-0">
         {children}
       </div>
+
     </div>
   );
 

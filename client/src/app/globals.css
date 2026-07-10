@@ -34,3 +34,22 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+@keyframes level-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(201, 168, 76, 0); }
+  30%  { box-shadow: 0 0 32px 8px rgba(201, 168, 76, 0.5); }
+  100% { box-shadow: 0 0 0 0 rgba(201, 168, 76, 0); }
+}
+
+.animate-level-flash {
+  animation: level-flash 1s ease-out forwards;
+}
+
+@keyframes group-rise {
+  0%   { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-group-rise {
+  animation: group-rise 0.5s ease-out forwards;
+}

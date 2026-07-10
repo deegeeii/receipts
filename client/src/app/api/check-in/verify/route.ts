@@ -234,6 +234,37 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let groupChangeSummary = "";
+
+  if (groupChanged) {
+    const { data: journeyCheckIns } = await supabase
+      .from("check_ins")
+      .select("check_in_date, receipt_text")
+      .eq("project_id", project_id)
+      .eq("user_id", user.id)
+      .order("check_in_date", { ascending: false })
+      .limit(10);
+
+    const journeyText = (journeyCheckIns ?? [])
+      .map((c) => `${c.check_in_date}: ${c.receipt_text}`)
+      .join("\n");
+
+    try {
+      const summaryMsg = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 150,
+        system: `You are the voice of Receipt — an accountability app. Someone just leveled up to ${getLevelGroup(newLevel)}. Write 2-3 sentences summarizing their journey based on their recent check-ins. Be specific about what you noticed. Tone: proud, like a mentor who watched them earn it. No corporate language.`,
+        messages: [{ role: "user", content: journeyText || "First check-in." }],
+      });
+
+      groupChangeSummary =
+        summaryMsg.content[0].type === "text" ? summaryMsg.content[0].text : "";
+    } catch (summaryError) {
+      console.error("verify: group change summary failed", summaryError);
+    }
+  }
+
+
   const { data: checkIn, error: checkInError } = await supabase
     .from("check_ins")
     .insert({
@@ -340,8 +371,10 @@ export async function POST(request: NextRequest) {
     leveled_up: leveledUp,
     level_group: getLevelGroup(newLevel),
     group_changed: groupChanged,
+    group_change_summary: groupChangeSummary,
     streak_reset: streakReset,
     streak_save_used: streakSaveUsed,
     streak_save_earned: streakSaveEarned,
   });
+  
 }

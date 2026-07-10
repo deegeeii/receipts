@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckInMode } from "@/lib/checkIn/getCheckInMode";
 
+// ── TYPES ─────────────────────────────────────────────────────────────────────
 type Props = {
   projectId: string;
   projectTitle: string;
@@ -12,16 +13,25 @@ type Props = {
 
 type CheckInStage = "receipt" | "question" | "done";
 
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+const GROUP_UNLOCKS: Record<string, string> = {
+  Sophomore: "Weekly deep reviews are now unlocked.",
+  Junior: "Tiered day types are now unlocked.",
+  Graduate: "Voice memo and Mystery Door are now unlocked.",
+  Builder: "Financial identity tier unlocked.",
+  Mogul: "Elite tier unlocked.",
+  Legend: "You have reached the top. No ceiling.",
+};
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
 }
 
-// CheckInFlow — runs the daily Receipt Model, Weekly Deep Review, pending review gate, or rest day screen
-export default function CheckInFlow({
-  projectId,
-  projectTitle,
-  mode,
-}: Props) {
+// ── COMPONENT ─────────────────────────────────────────────────────────────────
+export default function CheckInFlow({ projectId, projectTitle, mode }: Props) {
+
+  // ── STATE ───────────────────────────────────────────────────────────────────
   const router = useRouter();
 
   const [stage, setStage] = useState<CheckInStage>("receipt");
@@ -37,8 +47,11 @@ export default function CheckInFlow({
   const [leveledUp, setLeveledUp] = useState(false);
   const [levelGroup, setLevelGroup] = useState("");
   const [groupChanged, setGroupChanged] = useState(false);
+  const [groupChangeSummary, setGroupChangeSummary] = useState("");
   const [streakReset, setStreakReset] = useState(false);
+  const [showGroupOverlay, setShowGroupOverlay] = useState(false);
 
+  // ── EFFECTS ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     setStage("receipt");
     setReceiptText("");
@@ -50,32 +63,13 @@ export default function CheckInFlow({
     setLeveledUp(false);
     setLevelGroup("");
     setGroupChanged(false);
+    setGroupChangeSummary("");
     setStreakReset(false);
+    setShowGroupOverlay(false);
     setError(null);
   }, [projectId]);
 
-  // rest_day — no check-in possible, show a simple screen
-  if (mode === "rest_day") {
-    return (
-      <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
-        <div className="w-full max-w-sm flex flex-col gap-8 text-center">
-          <div className="flex flex-col gap-2">
-            <h2 className="text-2xl font-bold text-[#F0EDEA]">The rest is yours.</h2>
-            <p className="text-sm text-[#6B6B6B]">
-              Today is an off day for {projectTitle}. Come back on your next work day.
-            </p>
-          </div>
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="w-full py-4 bg-[#111111] border border-[#1F1F1F] text-[#F0EDEA] font-semibold text-base rounded-md tracking-wide hover:border-[#C9A84C] transition-colors"
-          >
-            Back to dashboard
-          </button>
-        </div>
-      </main>
-    );
-  }
-
+  // ── HANDLERS ────────────────────────────────────────────────────────────────
   async function handleSubmitReceipt() {
     setLoading(true);
     setError(null);
@@ -135,175 +129,233 @@ export default function CheckInFlow({
     setLeveledUp(data.leveled_up);
     setLevelGroup(data.level_group);
     setGroupChanged(data.group_changed);
+    setGroupChangeSummary(data.group_change_summary ?? "");
     setStreakReset(data.streak_reset ?? false);
     setStage("done");
     setLoading(false);
+
+    if (data.group_changed) {
+      setTimeout(() => setShowGroupOverlay(true), 800);
+    }
   }
 
-  // mode-aware copy
+  // ── RENDER ──────────────────────────────────────────────────────────────────
+  if (mode === "rest_day") {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
+        <div className="w-full max-w-sm flex flex-col gap-8 text-center">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-2xl font-bold text-[#F0EDEA]">
+              The rest is yours.
+            </h2>
+            <p className="text-sm text-[#6B6B6B]">
+              Today is an off day for {projectTitle}. Come back on your next work day.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="w-full py-4 bg-[#111111] border border-[#1F1F1F] text-[#F0EDEA] font-semibold text-base rounded-md tracking-wide hover:border-[#C9A84C] transition-colors"
+          >
+            Back to dashboard
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   const receiptHeading =
-    mode === "pending_review"
-      ? "Before you begin."
-      : mode === "weekly_review"
-      ? "Weekly Deep Review."
-      : "Drop your receipt.";
+    mode === "pending_review" ? "Before you begin."
+    : mode === "weekly_review" ? "Weekly Deep Review."
+    : "Drop your receipt.";
+
   const receiptSubtitle =
-    mode === "pending_review"
-      ? "Complete last week's review first."
-      : mode === "weekly_review"
-      ? "How did this week go?"
-      : "What did you actually do today?";
+    mode === "pending_review" ? "Complete last week's review first."
+    : mode === "weekly_review" ? "How did this week go?"
+    : "What did you actually do today?";
+
   const receiptLabel =
     mode === "pending_review" || mode === "weekly_review"
       ? "Last week's receipt"
       : "Today's receipt";
+
   const receiptPlaceholder =
     mode === "pending_review" || mode === "weekly_review"
       ? "Be honest. What actually happened?"
       : "Be specific. This is your proof.";
+
   const questionLabel =
     mode === "pending_review" || mode === "weekly_review"
       ? "Reflect on it"
       : "One question";
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
-      <div className="w-full max-w-sm flex flex-col gap-8">
+    <>
+      {/* Group change full-screen overlay */}
+      {showGroupOverlay && (
+        <div className="fixed inset-0 z-50 bg-[#0A0A0A] flex flex-col items-center justify-center px-6 animate-group-rise">
+          <div className="w-full max-w-sm flex flex-col items-center gap-8 text-center">
 
-        {stage === "receipt" && (
-          <>
-            <div className="flex flex-col gap-1">
-              <h2 className="text-2xl font-bold text-[#F0EDEA]">
-                {receiptHeading}
-              </h2>
-              <p className="text-sm text-[#6B6B6B]">
-                {receiptSubtitle}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-[#C9A84C] uppercase tracking-widest">
+                Rank unlocked
               </p>
+              <h1 className="text-5xl font-bold text-[#F0EDEA]">
+                {levelGroup}
+              </h1>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="receipt"
-                className="text-xs text-[#6B6B6B] uppercase tracking-wide"
-              >
-                {receiptLabel}
-              </label>
-              <textarea
-                id="receipt"
-                value={receiptText}
-                onChange={(e) => setReceiptText(e.target.value)}
-                rows={5}
-                placeholder={receiptPlaceholder}
-                className="w-full px-4 py-3 bg-[#111111] border border-[#1F1F1F] rounded-md text-[#F0EDEA] placeholder-[#6B6B6B] text-sm resize-none focus:outline-none focus:border-[#C9A84C] transition-colors"
-              />
-            </div>
-
-            <button
-              onClick={handleSubmitReceipt}
-              disabled={loading || receiptText.trim().length === 0}
-              className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? "Reading..." : "Drop it"}
-            </button>
-          </>
-        )}
-
-        {stage === "question" && (
-          <>
-            <div className="flex flex-col gap-2">
-              <span className="text-xs text-[#6B6B6B] uppercase tracking-wide">
-                {questionLabel}
-              </span>
-              <p className="text-lg text-[#F0EDEA] leading-relaxed">
-                {question}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="answer"
-                className="text-xs text-[#6B6B6B] uppercase tracking-wide"
-              >
-                Your answer
-              </label>
-              <textarea
-                id="answer"
-                value={answerText}
-                onChange={(e) => setAnswerText(e.target.value)}
-                rows={4}
-                placeholder="Answer it straight."
-                className="w-full px-4 py-3 bg-[#111111] border border-[#1F1F1F] rounded-md text-[#F0EDEA] placeholder-[#6B6B6B] text-sm resize-none focus:outline-none focus:border-[#C9A84C] transition-colors"
-              />
-            </div>
-
-            <button
-              onClick={handleSubmitAnswer}
-              disabled={loading || answerText.trim().length === 0}
-              className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? "Sending..." : "Send it"}
-            </button>
-          </>
-        )}
-
-        {stage === "done" && (
-          <div className="flex flex-col items-center gap-6 text-center">
-            <p className="text-lg text-[#F0EDEA] leading-relaxed whitespace-pre-line">
-              {closingMessage}
-            </p>
-
-            <p className="text-sm text-[#C9A84C] font-semibold">
-              {formatCents(payoutAmount)} released
-            </p>
-
-            {streakReset && (
-              <p className="text-sm text-[#6B6B6B]">
-                Streak reset — but you showed up. That&apos;s the only thing that matters.
+            {groupChangeSummary && (
+              <p className="text-sm text-[#6B6B6B] leading-relaxed">
+                {groupChangeSummary}
               </p>
             )}
 
-            {groupChanged && (
-              <div className="w-full flex flex-col items-center gap-1 px-5 py-5 border border-[#C9A84C] rounded-md">
-                <span className="text-xs text-[#C9A84C] uppercase tracking-wide">
-                  New rank unlocked
-                </span>
-                <span className="text-xl font-bold text-[#F0EDEA]">
-                  Welcome to {levelGroup}
-                </span>
+            {GROUP_UNLOCKS[levelGroup] && (
+              <div className="w-full px-5 py-4 border border-[#C9A84C]/30 rounded-md">
+                <p className="text-sm text-[#C9A84C]">
+                  {GROUP_UNLOCKS[levelGroup]}
+                </p>
               </div>
             )}
 
-            {leveledUp && !groupChanged && (
-              <div className="px-4 py-2 border border-[#C9A84C]/50 rounded-md">
-                <span className="text-sm text-[#C9A84C] font-semibold">
-                  Level up! You&apos;re now level {newLevel}
-                </span>
-              </div>
-            )}
+            <button
+              onClick={() => setShowGroupOverlay(false)}
+              className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] transition-colors"
+            >
+              Let&apos;s go
+            </button>
 
-            {mode === "pending_review" ? (
-              <button
-                onClick={() => router.push(`/check-in/${projectId}`)}
-                className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] transition-colors"
-              >
-                Start today&apos;s check-in
-              </button>
-            ) : (
-              <button
-                onClick={() => router.push("/dashboard")}
-                className="w-full py-4 bg-[#111111] border border-[#1F1F1F] text-[#F0EDEA] font-semibold text-base rounded-md tracking-wide hover:border-[#C9A84C] transition-colors"
-              >
-                Back to dashboard
-              </button>
-            )}
           </div>
-        )}
+        </div>
+      )}
 
-        {error && (
-          <p className="text-sm text-[#7B2D2D] text-center">{error}</p>
-        )}
+      <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
+        <div className="w-full max-w-sm flex flex-col gap-8">
 
-      </div>
-    </main>
+          {stage === "receipt" && (
+            <>
+              <div className="flex flex-col gap-1">
+                <h2 className="text-2xl font-bold text-[#F0EDEA]">
+                  {receiptHeading}
+                </h2>
+                <p className="text-sm text-[#6B6B6B]">
+                  {receiptSubtitle}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="receipt"
+                  className="text-xs text-[#6B6B6B] uppercase tracking-wide"
+                >
+                  {receiptLabel}
+                </label>
+                <textarea
+                  id="receipt"
+                  value={receiptText}
+                  onChange={(e) => setReceiptText(e.target.value)}
+                  rows={5}
+                  placeholder={receiptPlaceholder}
+                  className="w-full px-4 py-3 bg-[#111111] border border-[#1F1F1F] rounded-md text-[#F0EDEA] placeholder-[#6B6B6B] text-sm resize-none focus:outline-none focus:border-[#C9A84C] transition-colors"
+                />
+              </div>
+
+              <button
+                onClick={handleSubmitReceipt}
+                disabled={loading || receiptText.trim().length === 0}
+                className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? "Reading..." : "Drop it"}
+              </button>
+            </>
+          )}
+
+          {stage === "question" && (
+            <>
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-[#6B6B6B] uppercase tracking-wide">
+                  {questionLabel}
+                </span>
+                <p className="text-lg text-[#F0EDEA] leading-relaxed">
+                  {question}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="answer"
+                  className="text-xs text-[#6B6B6B] uppercase tracking-wide"
+                >
+                  Your answer
+                </label>
+                <textarea
+                  id="answer"
+                  value={answerText}
+                  onChange={(e) => setAnswerText(e.target.value)}
+                  rows={4}
+                  placeholder="Answer it straight."
+                  className="w-full px-4 py-3 bg-[#111111] border border-[#1F1F1F] rounded-md text-[#F0EDEA] placeholder-[#6B6B6B] text-sm resize-none focus:outline-none focus:border-[#C9A84C] transition-colors"
+                />
+              </div>
+
+              <button
+                onClick={handleSubmitAnswer}
+                disabled={loading || answerText.trim().length === 0}
+                className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? "Sending..." : "Send it"}
+              </button>
+            </>
+          )}
+
+          {stage === "done" && (
+            <div className="flex flex-col items-center gap-6 text-center">
+              <p className="text-lg text-[#F0EDEA] leading-relaxed whitespace-pre-line">
+                {closingMessage}
+              </p>
+
+              <p className="text-sm text-[#C9A84C] font-semibold">
+                {formatCents(payoutAmount)} released
+              </p>
+
+              {streakReset && (
+                <p className="text-sm text-[#6B6B6B]">
+                  Streak reset — but you showed up. That&apos;s the only thing that matters.
+                </p>
+              )}
+
+              {leveledUp && !groupChanged && (
+                <div className="px-4 py-2 border border-[#C9A84C]/50 rounded-md animate-level-flash">
+                  <span className="text-sm text-[#C9A84C] font-semibold">
+                    Level up — you&apos;re now Level {newLevel}
+                  </span>
+                </div>
+              )}
+
+              {mode === "pending_review" ? (
+                <button
+                  onClick={() => router.push(`/check-in/${projectId}`)}
+                  className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] transition-colors"
+                >
+                  Start today&apos;s check-in
+                </button>
+              ) : (
+                <button
+                  onClick={() => router.push("/dashboard")}
+                  className="w-full py-4 bg-[#111111] border border-[#1F1F1F] text-[#F0EDEA] font-semibold text-base rounded-md tracking-wide hover:border-[#C9A84C] transition-colors"
+                >
+                  Back to dashboard
+                </button>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <p className="text-sm text-[#7B2D2D] text-center">{error}</p>
+          )}
+
+        </div>
+      </main>
+    </>
   );
 }
