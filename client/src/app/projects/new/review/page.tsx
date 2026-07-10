@@ -253,6 +253,24 @@ export default function ReviewAndCommitStep() {
           <p className="text-sm text-[#7B2D2D] text-center">{submitError}</p>
         )}
 
+        <div className="flex justify-center gap-4 pt-2">
+          <a
+            href="/how-it-works"
+            target="_blank"
+            className="text-xs text-[#6B6B6B] hover:text-[#C9A84C] transition-colors"
+          >
+            How your money works
+          </a>
+          <span className="text-xs text-[#3A3A3A]">·</span>
+          <a
+            href="/refund-policy"
+            target="_blank"
+            className="text-xs text-[#6B6B6B] hover:text-[#C9A84C] transition-colors"
+          >
+            Refund policy
+          </a>
+        </div>
+
       </div>
     </main>
   );
