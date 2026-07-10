@@ -1,0 +1,9 @@
+{
+    "crons": [
+      {
+        "path": "/api/cron/missed-days",
+        "schedule": "0 0 * * *"
+      }
+    ]
+  }
+  

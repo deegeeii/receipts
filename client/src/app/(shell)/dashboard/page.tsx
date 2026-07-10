@@ -7,6 +7,7 @@ import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
 import ProjectSwitcher from "./_components/ProjectSwitcher";
 import SetupPayoutsBanner from "./_components/SetupPayoutsBanner";
 import OverdueBanner from "./_components/OverdueBanner";
+import MissedDayModal from "./_components/MissedDayModal";
 
 // ── PAGE ──────────────────────────────────────────────────────────────────────
 export default async function DashboardPage() {
@@ -40,6 +41,15 @@ export default async function DashboardPage() {
   const projects = activeProjects ?? [];
   const projectIds = projects.map((project) => project.id);
   const today = getDateInTimezone(new Date(), profile?.timezone ?? "UTC");
+
+  const monthStart = today.slice(0, 7) + "-01";
+
+  const { count: risksThisMonth } = await supabase
+    .from("missed_days")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gte("missed_date", monthStart);
+
 
   let checkedInProjectIds = new Set<string>();
   let tasksByProject: Record<
@@ -116,6 +126,8 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] px-6 py-12">
+      <MissedDayModal />
+
       <div className="w-full max-w-sm mx-auto flex flex-col gap-10">
 
         <div className="flex flex-col gap-1">
@@ -128,6 +140,12 @@ export default async function DashboardPage() {
             Level {profile?.level ?? 1} · {levelGroup} · {profile?.xp ?? 0} XP ·{" "}
             {profile?.current_streak ?? 0} day streak
           </p>
+          {(risksThisMonth ?? 0) > 0 && (
+            <p className="text-xs text-[#6B6B6B]">
+              You took {risksThisMonth} risk{risksThisMonth === 1 ? "" : "s"} this month.
+            </p>
+          )}
+
         </div>
 
         {!profile?.stripe_account_id && (

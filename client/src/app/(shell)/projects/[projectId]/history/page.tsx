@@ -1,6 +1,8 @@
 // ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import MissedDayPreference from "./_components/MissedDayPreference";
+
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function formatDate(dateStr: string): string {
@@ -38,11 +40,12 @@ export default async function ProjectHistoryPage({
   }
 
   const { data: project } = await supabase
-    .from("projects")
-    .select("title")
-    .eq("id", projectId)
-    .eq("user_id", user.id)
-    .single();
+  .from("projects")
+  .select("title, missed_day_preference, default_charity")
+  .eq("id", projectId)
+  .eq("user_id", user.id)
+  .single();
+
 
   if (!project) {
     console.error("history: project not found", { projectId, user_id: user.id });
@@ -73,6 +76,13 @@ export default async function ProjectHistoryPage({
             Receipt history
           </p>
         </div>
+
+        <MissedDayPreference
+          projectId={projectId}
+          initialPreference={project.missed_day_preference}
+          initialCharity={project.default_charity}
+        />
+
 
         {(!checkIns || checkIns.length === 0) ? (
           <p className="text-sm text-[#6B6B6B] text-center py-10">
