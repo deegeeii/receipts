@@ -1,8 +1,9 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import CrewWorkspace from "./_components/CrewWorkspace";
 
-// CrewPage — your invite code, buddy redeem form, and buddy list (level, level group, streak)
+// ── PAGE ──────────────────────────────────────────────────────────────────────
 export default async function CrewPage() {
   const supabase = await createClient();
 
@@ -16,7 +17,7 @@ export default async function CrewPage() {
 
   const { data: profile, error: profileError } = await supabase
     .from("users")
-    .select("invite_code")
+    .select("invite_code, name, level, current_streak")
     .eq("id", user.id)
     .single();
 
@@ -48,6 +49,12 @@ export default async function CrewPage() {
         <CrewWorkspace
           inviteCode={profile?.invite_code ?? ""}
           initialBuddies={buddies ?? []}
+          currentUser={{
+            id: user.id,
+            name: profile?.name ?? null,
+            level: profile?.level ?? 1,
+            current_streak: profile?.current_streak ?? 0,
+          }}
         />
 
       </div>

@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
     short_mode_pass_used = false,
   } = await request.json();
 
-  // short mode pass overrides mode to light_day behavior
   const mode = short_mode_pass_used ? "light_day" : rawMode;
   const isReviewMode = mode === "weekly_review" || mode === "pending_review";
 
@@ -130,6 +129,31 @@ export async function POST(request: NextRequest) {
   const workDays = project.work_days ?? [1, 2, 3, 4, 5];
   const prevWorkDay = getPrevWorkDay(today, workDays);
 
+  // ── BUDDY BONUS ────────────────────────────────────────────────────────────
+  let buddyBonusXp = 0;
+  let buddyMatchNames: string[] = [];
+
+  const { data: myBuddies } = await supabase.rpc("get_my_buddies");
+  const buddyIds = (myBuddies ?? []).map((b: { id: string }) => b.id);
+
+  if (buddyIds.length > 0) {
+    const { data: buddyCheckIns } = await supabase
+      .from("check_ins")
+      .select("user_id")
+      .eq("check_in_date", today)
+      .in("user_id", buddyIds);
+
+    const matchedIds = (buddyCheckIns ?? [])
+      .map((c) => c.user_id)
+      .slice(0, 3);
+
+    buddyMatchNames = (myBuddies ?? [])
+      .filter((b: { id: string; name: string | null }) => matchedIds.includes(b.id))
+      .map((b: { id: string; name: string | null }) => b.name ?? "Anonymous");
+
+    buddyBonusXp = matchedIds.length * 10;
+  }
+
   let newStreak: number;
   let streakReset = false;
   let streakSaveUsed = false;
@@ -174,7 +198,7 @@ export async function POST(request: NextRequest) {
   }
 
   const xpEarned = Math.round(baseXpEarned * xpMultiplier);
-  const newXp = profile.xp + xpEarned;
+  const newXp = profile.xp + xpEarned + buddyBonusXp;
   const newLevel = getLevelForXp(newXp);
   const leveledUp = newLevel > profile.level;
   const groupChanged =
@@ -494,5 +518,7 @@ export async function POST(request: NextRequest) {
     streak_save_earned: streakSaveEarned || streakSaveFromMilestone > 0,
     short_mode_pass_earned: shortModePassEarned > 0,
     freeze_day_earned: freezeDayEarned > 0,
+    buddy_bonus_xp: buddyBonusXp,
+    buddy_match_names: buddyMatchNames,
   });
 }
