@@ -1,4 +1,4 @@
-/// ── IMPORTS ───────────────────────────────────────────────────────────────────
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { anthropic } from "@/lib/anthropic/client";
 import { calculateXp } from "@/lib/xp/calculateXp";
@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getLevelForXp, getLevelGroup } from "@/lib/xp/levels";
 import { formatTaskList } from "@/lib/ai/formatTaskList";
 import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
+import { getVoiceTone } from "@/lib/ai/getVoiceTone";
 import { stripe } from "@/lib/stripe/server";
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
   const { data: profile } = await supabase
     .from("users")
     .select(
-      "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id"
+      "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id, ai_voice"
     )
     .eq("id", user.id)
     .single();
@@ -116,6 +117,8 @@ export async function POST(request: NextRequest) {
     console.error("verify: profile not found", { user_id: user.id });
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
+
+  const toneLine = getVoiceTone(profile.ai_voice ?? "warm");
 
   const today = getDateInTimezone(new Date(), profile.timezone);
   const workDays = project.work_days ?? [1, 2, 3, 4, 5];
@@ -192,7 +195,7 @@ export async function POST(request: NextRequest) {
     - Acknowledge that they chose the harder, more interesting path today.
     - One to two sentences, then the closing line.
     - End the message with exactly this line on its own: "${closingLine}"
-    - Tone: curious, sharp, like someone who's impressed they took the door.
+    - ${toneLine}
     - No corporate language. Never say "verification complete."
     - Respond with ONLY the closing message.
 
@@ -210,7 +213,8 @@ export async function POST(request: NextRequest) {
     Rules:
     - Reference something concrete from their receipt. Show you actually read it.
     - One sentence of acknowledgment, then the closing line. Nothing else.
-    - Tone: warm, direct. No corporate language.
+    - ${toneLine}
+    - No corporate language.
     - Respond with ONLY the closing message.
 
     What they did today: ${receipt_text}
@@ -229,7 +233,7 @@ export async function POST(request: NextRequest) {
     - Acknowledge the depth — this was a heavy day and they showed up for it.
     - Two to three sentences.
     - End the message with exactly this line on its own: "${closingLine}"
-    - Tone: like a mentor who watched you grind through your hardest day and actually noticed.
+    - ${toneLine}
     - No corporate language. Never say "verification complete."
     - Respond with ONLY the closing message.
 
@@ -253,7 +257,7 @@ export async function POST(request: NextRequest) {
     - Acknowledge a pattern or growth you see across the week — specific, not generic.
     - Two to four sentences.
     - End the message with exactly this line on its own: "${closingLine}"
-    - Tone: like a mentor who watched you show up all week and actually noticed.
+    - ${toneLine}
     - No corporate language. Never say "verification complete."
     - Respond with ONLY the closing message.
 
@@ -277,7 +281,7 @@ export async function POST(request: NextRequest) {
     - If they checked off roadmap steps today, acknowledge that progress.
     - One to three sentences.
     - End the message with exactly this line on its own: "${closingLine}"
-    - Tone: warm, direct, like a friend who's seen you show up.
+    - ${toneLine}
     - No corporate language. Never say "verification complete."
     - Respond with ONLY the closing message.
 
@@ -300,9 +304,10 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "user",
-          content: mode === "light_day" || mode === "mystery_door"
-            ? receipt_text
-            : ai_response,
+          content:
+            mode === "light_day" || mode === "mystery_door"
+              ? receipt_text
+              : ai_response,
         },
       ],
     });
@@ -337,7 +342,7 @@ export async function POST(request: NextRequest) {
       const summaryMsg = await anthropic.messages.create({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 150,
-        system: `You are the voice of Receipt — an accountability app. Someone just leveled up to ${getLevelGroup(newLevel)}. Write 2-3 sentences summarizing their journey based on their recent check-ins. Be specific about what you noticed. Tone: proud, like a mentor who watched them earn it. No corporate language.`,
+        system: `You are the voice of Receipt — an accountability app. Someone just leveled up to ${getLevelGroup(newLevel)}. Write 2-3 sentences summarizing their journey based on their recent check-ins. Be specific about what you noticed. ${toneLine} No corporate language.`,
         messages: [{ role: "user", content: journeyText || "First check-in." }],
       });
 

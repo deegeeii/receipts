@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { anthropic } from "@/lib/anthropic/client";
 import { NextRequest, NextResponse } from "next/server";
 import { formatTaskList } from "@/lib/ai/formatTaskList";
+import { getVoiceTone } from "@/lib/ai/getVoiceTone";
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const MYSTERY_FORMATS = [
@@ -39,6 +40,14 @@ export async function POST(request: NextRequest) {
   const { project_id, receipt_text, mode = "receipt" } =
     await request.json();
 
+  const { data: profile } = await supabase
+    .from("users")
+    .select("ai_voice")
+    .eq("id", user.id)
+    .single();
+
+  const toneLine = getVoiceTone(profile?.ai_voice ?? "warm");
+
   // light_day skips the question stage entirely
   if (mode === "light_day") {
     return NextResponse.json({ skip: true, question: "", question2: "" });
@@ -56,7 +65,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ai_quiz needs project context and an AI call
     const { data: project } = await supabase
       .from("projects")
       .select("title, good_day_description, hard_day_description")
@@ -94,6 +102,7 @@ Rules:
 - Questions must be specific to this project — not generic.
 - Mix the angles: one about today's specifics, one about obstacles or decisions, one about momentum going forward.
 - One sentence each, max.
+- ${toneLine}
 - Respond with EXACTLY 3 questions, one per line. No numbering, no labels, no extra text.
 
 Project: ${project.title}
@@ -128,7 +137,7 @@ ${recentContext}`,
     }
   }
 
-  // Standard modes — fetch project for all remaining paths
+  // Standard modes
   const { data: project } = await supabase
     .from("projects")
     .select("title, good_day_description, hard_day_description")
@@ -168,7 +177,7 @@ ${recentContext}`,
     - Question 2: Zoom out — strategy, the bigger picture, or what they'll carry into the rest of the week.
     - Each question is one or two sentences max.
     - Both questions must be specific to what they wrote. No generic questions.
-    - Tone: sharp mentor who's paying full attention.
+    - ${toneLine}
     - Respond with EXACTLY 2 questions, each on its own line. No numbering, no labels, no extra text.
 
     Project: ${project.title}
@@ -212,9 +221,8 @@ ${recentContext}`,
     - Look across the entire week — find a theme, a pattern, a tension, or a breakthrough they may not have named themselves.
     - Ask about something that matters for the NEXT week, not just what already happened.
     - One or two sentences, max.
-    - Sound like a sharp mentor who's seen the whole picture — not just today's entry.
-    - Tone: direct, perceptive. No fluff, no praise for the sake of praise.
     - Do not summarize the week back to them. Just ask the question.
+    - ${toneLine}
     - Respond with ONLY the question. No preamble, no labels.
 
     Project: ${project.title}
@@ -236,9 +244,8 @@ ${recentContext}`,
     - Reference something concrete from what they wrote. A real decision, detail, or edge case they mentioned. Never ask something generic like "how did it go?" or "what did you learn?"
     - If they checked off roadmap steps today, you can ask about one of those specifically instead.
     - One or two sentences, max.
-    - Sound like a sharp friend who's actually paying attention — not a corporate bot, not a checklist.
-    - Tone: warm and curious. This person is early in their journey with the app.
     - Do not summarize what they said back to them first. Just ask the question.
+    - ${toneLine}
     - Respond with ONLY the question. No preamble, no labels.
 
     Project: ${project.title}
