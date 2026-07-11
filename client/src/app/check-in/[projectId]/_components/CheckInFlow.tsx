@@ -12,6 +12,8 @@ type Props = {
   mode: CheckInMode;
   canUseVoice: boolean;
   canUseMystery: boolean;
+  shortModePasses: number;
+  freezeDaysAvailable: number;
 };
 
 type CheckInStage = "receipt" | "question" | "done";
@@ -49,6 +51,8 @@ export default function CheckInFlow({
   mode,
   canUseVoice,
   canUseMystery,
+  shortModePasses,
+  freezeDaysAvailable,
 }: Props) {
 
   // ── STATE ───────────────────────────────────────────────────────────────────
@@ -91,6 +95,15 @@ export default function CheckInFlow({
   const [gutRating, setGutRating] = useState<number | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(120);
 
+  const [shortModeActive, setShortModeActive] = useState(false);
+  const [freezeConfirming, setFreezeConfirming] = useState(false);
+  const [freezeLoading, setFreezeLoading] = useState(false);
+  const [frozeToday, setFrozeToday] = useState(false);
+  const [freezeDaysRemaining, setFreezeDaysRemaining] = useState(freezeDaysAvailable);
+
+  const [shortModePassEarned, setShortModePassEarned] = useState(false);
+  const [freezeDayEarned, setFreezeDayEarned] = useState(false);
+
   // ── EFFECTS ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     setStage("receipt");
@@ -122,6 +135,12 @@ export default function CheckInFlow({
     setOneWordRevealed(false);
     setGutRating(null);
     setTimerSeconds(120);
+    setShortModeActive(false);
+    setFreezeConfirming(false);
+    setFrozeToday(false);
+    setFreezeDaysRemaining(freezeDaysAvailable);
+    setShortModePassEarned(false);
+    setFreezeDayEarned(false);
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
   }, [projectId]);
 
@@ -146,7 +165,13 @@ export default function CheckInFlow({
   }, [mysteryActive, mysteryFormat]);
 
   // ── HANDLERS ────────────────────────────────────────────────────────────────
-  async function handleVerify(q: string, a: string, q2 = "", a2 = "") {
+  async function handleVerify(
+    q: string,
+    a: string,
+    q2 = "",
+    a2 = "",
+    shortModePassUsed = false
+  ) {
     setLoading(true);
     setError(null);
 
@@ -161,6 +186,7 @@ export default function CheckInFlow({
         ai_question2: q2,
         ai_response2: a2,
         mode,
+        short_mode_pass_used: shortModePassUsed,
       }),
     });
 
@@ -181,6 +207,8 @@ export default function CheckInFlow({
     setGroupChanged(data.group_changed);
     setGroupChangeSummary(data.group_change_summary ?? "");
     setStreakReset(data.streak_reset ?? false);
+    setShortModePassEarned(data.short_mode_pass_earned ?? false);
+    setFreezeDayEarned(data.freeze_day_earned ?? false);
     setStage("done");
     setLoading(false);
 
@@ -193,8 +221,8 @@ export default function CheckInFlow({
     setLoading(true);
     setError(null);
 
-    if (mode === "light_day") {
-      await handleVerify("", "");
+    if (mode === "light_day" || shortModeActive) {
+      await handleVerify("", "", "", "", shortModeActive);
       return;
     }
 
@@ -372,12 +400,40 @@ export default function CheckInFlow({
     setGroupChanged(data.group_changed);
     setGroupChangeSummary(data.group_change_summary ?? "");
     setStreakReset(data.streak_reset ?? false);
+    setShortModePassEarned(data.short_mode_pass_earned ?? false);
+    setFreezeDayEarned(data.freeze_day_earned ?? false);
     setStage("done");
     setLoading(false);
 
     if (data.group_changed) {
       setTimeout(() => setShowGroupOverlay(true), 800);
     }
+  }
+
+  async function handleConfirmFreeze() {
+    setFreezeLoading(true);
+    setError(null);
+
+    const response = await fetch("/api/check-in/freeze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("freeze: failed", data);
+      setError(data.error ?? "Freeze failed. Try again.");
+      setFreezeLoading(false);
+      setFreezeConfirming(false);
+      return;
+    }
+
+    setFreezeDaysRemaining(data.freeze_days_remaining ?? 0);
+    setFrozeToday(true);
+    setFreezeLoading(false);
+    setFreezeConfirming(false);
   }
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
@@ -404,15 +460,52 @@ export default function CheckInFlow({
     );
   }
 
+  // Freeze success screen
+  if (frozeToday) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
+        <div className="w-full max-w-sm flex flex-col gap-8 text-center">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-2xl font-bold text-[#F0EDEA]">
+              Streak protected.
+            </h2>
+            <p className="text-sm text-[#6B6B6B]">
+              No payout today. Your streak is safe.{" "}
+              {freezeDaysRemaining > 0
+                ? `${freezeDaysRemaining} freeze day${freezeDaysRemaining === 1 ? "" : "s"} remaining.`
+                : "No freeze days remaining."}
+            </p>
+          </div>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="w-full py-4 bg-[#111111] border border-[#1F1F1F] text-[#F0EDEA] font-semibold text-base rounded-md tracking-wide hover:border-[#C9A84C] transition-colors"
+          >
+            Back to dashboard
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const isWorkDayMode =
+    mode === "receipt" || mode === "heavy_day" || mode === "light_day";
+
+  const canUseShortModePass =
+    shortModePasses > 0 &&
+    (mode === "receipt" || mode === "heavy_day") &&
+    !shortModeActive;
+
   const receiptHeading =
-    mode === "pending_review" ? "Before you begin."
+    shortModeActive ? "Quick receipt."
+    : mode === "pending_review" ? "Before you begin."
     : mode === "weekly_review" ? "Weekly Deep Review."
     : mode === "light_day" ? "Quick receipt."
     : mode === "heavy_day" ? "Peak day receipt."
     : "Drop your receipt.";
 
   const receiptSubtitle =
-    mode === "pending_review" ? "Complete last week's review first."
+    shortModeActive ? "Short mode active — no follow-up question."
+    : mode === "pending_review" ? "Complete last week's review first."
     : mode === "weekly_review" ? "How did this week go?"
     : mode === "light_day" ? "One sentence. What did you do today?"
     : mode === "heavy_day" ? "Go deep. This is your heavy day."
@@ -426,12 +519,12 @@ export default function CheckInFlow({
   const receiptPlaceholder =
     mode === "pending_review" || mode === "weekly_review"
       ? "Be honest. What actually happened?"
-      : mode === "light_day"
+      : mode === "light_day" || shortModeActive
       ? "One sentence is enough."
       : "Be specific. This is your proof.";
 
   const receiptRows =
-    mode === "light_day" ? 2
+    mode === "light_day" || shortModeActive ? 2
     : mode === "heavy_day" ? 7
     : 5;
 
@@ -458,7 +551,7 @@ export default function CheckInFlow({
 
   return (
     <>
-      {/* Group change full-screen overlay */}
+      {/* Group change overlay */}
       {showGroupOverlay && (
         <div className="fixed inset-0 z-50 bg-[#0A0A0A] flex flex-col items-center justify-center px-6 animate-group-rise">
           <div className="w-full max-w-sm flex flex-col items-center gap-8 text-center">
@@ -507,7 +600,31 @@ export default function CheckInFlow({
                 </p>
               </div>
 
-              {/* Voice memo confirm screen */}
+              {/* Freeze confirm */}
+              {freezeConfirming && (
+                <div className="flex flex-col gap-4 px-5 py-4 border border-[#1F1F1F] rounded-md bg-[#111111]">
+                  <p className="text-sm text-[#F0EDEA]">
+                    Freeze today? Your streak stays intact but you won&apos;t earn a payout.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setFreezeConfirming(false)}
+                      className="flex-1 py-3 bg-[#111111] border border-[#1F1F1F] text-[#6B6B6B] text-sm font-semibold rounded-md hover:border-[#C9A84C] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmFreeze}
+                      disabled={freezeLoading}
+                      className="flex-1 py-3 bg-[#C9A84C] text-[#0A0A0A] text-sm font-semibold rounded-md hover:bg-[#E5C97A] disabled:opacity-40 transition-colors"
+                    >
+                      {freezeLoading ? "Freezing…" : "Freeze it"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Voice memo confirm */}
               {voiceStage === "confirm" && (
                 <div className="flex flex-col gap-4">
                   <p className="text-xs text-[#6B6B6B] uppercase tracking-wide">
@@ -529,7 +646,7 @@ export default function CheckInFlow({
                     <button
                       onClick={handleConfirmTranscript}
                       disabled={transcript.trim().length === 0}
-                      className="flex-1 py-3 bg-[#C9A84C] text-[#0A0A0A] text-sm font-semibold rounded-md hover:bg-[#E5C97A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="flex-1 py-3 bg-[#C9A84C] text-[#0A0A0A] text-sm font-semibold rounded-md hover:bg-[#E5C97A] disabled:opacity-40 transition-colors"
                     >
                       Looks good
                     </button>
@@ -538,7 +655,7 @@ export default function CheckInFlow({
               )}
 
               {/* Normal text input */}
-              {voiceStage !== "confirm" && (
+              {voiceStage !== "confirm" && !freezeConfirming && (
                 <>
                   <div className="flex flex-col gap-2">
                     <label
@@ -557,40 +674,73 @@ export default function CheckInFlow({
                     />
                   </div>
 
-                  {canUseVoice && (
-                    <div className="flex flex-col gap-2">
-                      {voiceStage === "idle" && (
-                        <button onClick={handleStartRecording} className={ghostBtn}>
-                          Use voice memo instead
-                        </button>
-                      )}
-                      {voiceStage === "recording" && (
-                        <button
-                          onClick={handleStopRecording}
-                          className="w-full py-3 bg-[#7B2D2D]/20 border border-[#7B2D2D] text-[#F0EDEA] text-sm font-semibold rounded-md hover:bg-[#7B2D2D]/40 transition-colors"
-                        >
-                          Recording… tap to stop
-                        </button>
-                      )}
-                      {voiceStage === "transcribing" && (
-                        <div className="w-full py-3 text-center text-sm text-[#6B6B6B]">
-                          Transcribing…
+                  {/* Items */}
+                  <div className="flex flex-col gap-2">
+                    {canUseShortModePass && (
+                      <button
+                        onClick={() => setShortModeActive(true)}
+                        className={ghostBtn}
+                      >
+                        Use short mode pass ({shortModePasses} left)
+                      </button>
+                    )}
+                    {shortModeActive && (
+                      <button
+                        onClick={() => setShortModeActive(false)}
+                        className="text-xs text-[#6B6B6B] hover:text-[#F0EDEA] transition-colors text-center"
+                      >
+                        Cancel short mode
+                      </button>
+                    )}
+                    {freezeDaysRemaining > 0 && isWorkDayMode && !shortModeActive && (
+                      <button
+                        onClick={() => setFreezeConfirming(true)}
+                        className={ghostBtn}
+                      >
+                        Freeze today ({freezeDaysRemaining} left)
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Voice + Mystery (hidden when short mode active) */}
+                  {!shortModeActive && (
+                    <>
+                      {canUseVoice && (
+                        <div className="flex flex-col gap-2">
+                          {voiceStage === "idle" && (
+                            <button onClick={handleStartRecording} className={ghostBtn}>
+                              Use voice memo instead
+                            </button>
+                          )}
+                          {voiceStage === "recording" && (
+                            <button
+                              onClick={handleStopRecording}
+                              className="w-full py-3 bg-[#7B2D2D]/20 border border-[#7B2D2D] text-[#F0EDEA] text-sm font-semibold rounded-md hover:bg-[#7B2D2D]/40 transition-colors"
+                            >
+                              Recording… tap to stop
+                            </button>
+                          )}
+                          {voiceStage === "transcribing" && (
+                            <div className="w-full py-3 text-center text-sm text-[#6B6B6B]">
+                              Transcribing…
+                            </div>
+                          )}
+                          {voiceError && (
+                            <p className="text-xs text-[#7B2D2D]">{voiceError}</p>
+                          )}
                         </div>
                       )}
-                      {voiceError && (
-                        <p className="text-xs text-[#7B2D2D]">{voiceError}</p>
-                      )}
-                    </div>
-                  )}
 
-                  {canUseMystery && (
-                    <button
-                      onClick={handleEnterMysteryDoor}
-                      disabled={mysteryLoading}
-                      className="w-full py-3 border border-[#C9A84C]/30 text-[#C9A84C] text-sm font-semibold rounded-md hover:border-[#C9A84C] hover:bg-[#C9A84C]/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {mysteryLoading ? "Opening…" : "Enter the Mystery Door"}
-                    </button>
+                      {canUseMystery && (
+                        <button
+                          onClick={handleEnterMysteryDoor}
+                          disabled={mysteryLoading}
+                          className="w-full py-3 border border-[#C9A84C]/30 text-[#C9A84C] text-sm font-semibold rounded-md hover:border-[#C9A84C] hover:bg-[#C9A84C]/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {mysteryLoading ? "Opening…" : "Enter the Mystery Door"}
+                        </button>
+                      )}
+                    </>
                   )}
 
                   <button
@@ -622,7 +772,6 @@ export default function CheckInFlow({
                 <p className="text-sm text-[#6B6B6B]">{mysteryPrompt}</p>
               </div>
 
-              {/* timed_write */}
               {mysteryFormat === "timed_write" && (
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
@@ -655,23 +804,16 @@ export default function CheckInFlow({
                     disabled={loading || receiptText.trim().length === 0}
                     className={primaryBtn}
                   >
-                    {loading
-                      ? "Submitting…"
-                      : timerSeconds > 0
-                      ? "Submit early"
-                      : "Submit"}
+                    {loading ? "Submitting…" : timerSeconds > 0 ? "Submit early" : "Submit"}
                   </button>
                 </div>
               )}
 
-              {/* ai_quiz */}
               {mysteryFormat === "ai_quiz" && (
                 <div className="flex flex-col gap-6">
                   {mysteryQuestions.map((q, i) => (
                     <div key={i} className="flex flex-col gap-2">
-                      <p className="text-base text-[#F0EDEA] leading-relaxed">
-                        {q}
-                      </p>
+                      <p className="text-base text-[#F0EDEA] leading-relaxed">{q}</p>
                       <textarea
                         value={quizAnswers[i]}
                         onChange={(e) => {
@@ -687,10 +829,7 @@ export default function CheckInFlow({
                   ))}
                   <button
                     onClick={handleSubmitMystery}
-                    disabled={
-                      loading ||
-                      quizAnswers.some((a) => a.trim().length === 0)
-                    }
+                    disabled={loading || quizAnswers.some((a) => a.trim().length === 0)}
                     className={primaryBtn}
                   >
                     {loading ? "Submitting…" : "Submit answers"}
@@ -698,16 +837,13 @@ export default function CheckInFlow({
                 </div>
               )}
 
-              {/* one_word_expand */}
               {mysteryFormat === "one_word_expand" && (
                 <div className="flex flex-col gap-6">
                   <div className="flex flex-col gap-3">
                     <input
                       type="text"
                       value={oneWord}
-                      onChange={(e) =>
-                        setOneWord(e.target.value.replace(/\s+/g, ""))
-                      }
+                      onChange={(e) => setOneWord(e.target.value.replace(/\s+/g, ""))}
                       maxLength={30}
                       placeholder="One word."
                       disabled={oneWordRevealed}
@@ -723,7 +859,6 @@ export default function CheckInFlow({
                       </button>
                     )}
                   </div>
-
                   {oneWordRevealed && (
                     <div className="flex flex-col gap-3">
                       <label className="text-xs text-[#6B6B6B] uppercase tracking-wide">
@@ -749,7 +884,6 @@ export default function CheckInFlow({
                 </div>
               )}
 
-              {/* gut_check */}
               {mysteryFormat === "gut_check" && (
                 <div className="flex flex-col gap-6">
                   <div className="flex flex-col gap-3">
@@ -772,7 +906,6 @@ export default function CheckInFlow({
                       ))}
                     </div>
                   </div>
-
                   {gutRating !== null && (
                     <div className="flex flex-col gap-3">
                       <label className="text-xs text-[#6B6B6B] uppercase tracking-wide">
@@ -798,7 +931,6 @@ export default function CheckInFlow({
                 </div>
               )}
 
-              {/* draw_a_scene */}
               {mysteryFormat === "draw_a_scene" && (
                 <div className="flex flex-col gap-4">
                   <textarea
@@ -915,6 +1047,25 @@ export default function CheckInFlow({
                   <span className="text-sm text-[#C9A84C] font-semibold">
                     Level up — you&apos;re now Level {newLevel}
                   </span>
+                </div>
+              )}
+
+              {(shortModePassEarned || freezeDayEarned) && (
+                <div className="flex flex-col gap-2 w-full">
+                  {shortModePassEarned && (
+                    <div className="px-4 py-2 border border-[#C9A84C]/30 rounded-md">
+                      <p className="text-xs text-[#C9A84C]">
+                        Short mode pass earned — streak milestone reached.
+                      </p>
+                    </div>
+                  )}
+                  {freezeDayEarned && (
+                    <div className="px-4 py-2 border border-[#C9A84C]/30 rounded-md">
+                      <p className="text-xs text-[#C9A84C]">
+                        Freeze day earned — streak milestone reached.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

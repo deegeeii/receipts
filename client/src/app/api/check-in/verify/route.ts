@@ -46,9 +46,12 @@ export async function POST(request: NextRequest) {
     ai_question2 = "",
     ai_response2 = "",
     mystery_format = "",
-    mode = "receipt",
+    mode: rawMode = "receipt",
+    short_mode_pass_used = false,
   } = await request.json();
 
+  // short mode pass overrides mode to light_day behavior
+  const mode = short_mode_pass_used ? "light_day" : rawMode;
   const isReviewMode = mode === "weekly_review" || mode === "pending_review";
 
   const { data: project } = await supabase
@@ -108,7 +111,7 @@ export async function POST(request: NextRequest) {
   const { data: profile } = await supabase
     .from("users")
     .select(
-      "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id, ai_voice"
+      "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id, ai_voice, short_mode_passes, freeze_days_available"
     )
     .eq("id", user.id)
     .single();
@@ -118,8 +121,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  const toneLine = getVoiceTone(profile.ai_voice ?? "warm");
+  if (short_mode_pass_used && (profile.short_mode_passes ?? 0) < 1) {
+    return NextResponse.json({ error: "No short mode passes remaining" }, { status: 400 });
+  }
 
+  const toneLine = getVoiceTone(profile.ai_voice ?? "warm");
   const today = getDateInTimezone(new Date(), profile.timezone);
   const workDays = project.work_days ?? [1, 2, 3, 4, 5];
   const prevWorkDay = getPrevWorkDay(today, workDays);
@@ -142,6 +148,15 @@ export async function POST(request: NextRequest) {
 
   const newLongestStreak = Math.max(profile.longest_streak, newStreak);
 
+  // ── MILESTONE ITEM AWARDS ──────────────────────────────────────────────────
+  const isNewStreakMilestone = newStreak > (profile.current_streak ?? 0);
+  const shortModePassEarned =
+    isNewStreakMilestone && newStreak % 7 === 0 ? 1 : 0;
+  const freezeDayEarned =
+    isNewStreakMilestone && newStreak % 14 === 0 ? 1 : 0;
+  const streakSaveFromMilestone =
+    isNewStreakMilestone && newStreak % 30 === 0 ? 1 : 0;
+
   const baseXpEarned = calculateXp({
     depositAmountCents: project.deposit_amount,
     dailyPayoutCents: project.daily_payout,
@@ -152,9 +167,9 @@ export async function POST(request: NextRequest) {
   if (isReviewMode) {
     if (recentCheckInCount >= 5) xpMultiplier = 1.5;
     else if (recentCheckInCount >= 4) xpMultiplier = 1.2;
-  } else if (mode === "heavy_day") {
+  } else if (rawMode === "heavy_day") {
     xpMultiplier = 1.25;
-  } else if (mode === "mystery_door") {
+  } else if (rawMode === "mystery_door") {
     xpMultiplier = 1.15;
   }
 
@@ -166,7 +181,10 @@ export async function POST(request: NextRequest) {
     leveledUp && getLevelGroup(newLevel) !== getLevelGroup(profile.level);
 
   const streakSaveEarned = mode === "weekly_review";
-  const streakSaveDelta = (streakSaveEarned ? 1 : 0) - (streakSaveUsed ? 1 : 0);
+  const streakSaveDelta =
+    (streakSaveEarned ? 1 : 0) +
+    streakSaveFromMilestone -
+    (streakSaveUsed ? 1 : 0);
 
   const closingLine =
     mode === "pending_review"
@@ -184,8 +202,9 @@ export async function POST(request: NextRequest) {
 
   let systemPrompt: string;
 
-  if (mode === "mystery_door") {
-    const formatLabel = MYSTERY_FORMAT_LABELS[mystery_format] ?? "a mystery format";
+  if (rawMode === "mystery_door") {
+    const formatLabel =
+      MYSTERY_FORMAT_LABELS[mystery_format] ?? "a mystery format";
     systemPrompt = `You are the voice of Receipt — an accountability app where people put money on the line to get real work done.
 
     Today someone went through the Mystery Door and completed ${formatLabel}. Close out this check-in.
@@ -208,7 +227,7 @@ export async function POST(request: NextRequest) {
   } else if (mode === "light_day") {
     systemPrompt = `You are the voice of Receipt — an accountability app where people put money on the line to get real work done.
 
-    Someone just logged a quick check-in on a light day. Acknowledge what they did in one warm, specific sentence — then end with exactly this line on its own: "${closingLine}"
+    Someone just logged a quick check-in${short_mode_pass_used ? " using a short mode pass" : " on a light day"}. Acknowledge what they did in one warm, specific sentence — then end with exactly this line on its own: "${closingLine}"
 
     Rules:
     - Reference something concrete from their receipt. Show you actually read it.
@@ -305,7 +324,7 @@ export async function POST(request: NextRequest) {
         {
           role: "user",
           content:
-            mode === "light_day" || mode === "mystery_door"
+            mode === "light_day" || rawMode === "mystery_door"
               ? receipt_text
               : ai_response,
         },
@@ -347,7 +366,9 @@ export async function POST(request: NextRequest) {
       });
 
       groupChangeSummary =
-        summaryMsg.content[0].type === "text" ? summaryMsg.content[0].text : "";
+        summaryMsg.content[0].type === "text"
+          ? summaryMsg.content[0].text
+          : "";
     } catch (summaryError) {
       console.error("verify: group change summary failed", summaryError);
     }
@@ -404,10 +425,7 @@ export async function POST(request: NextRequest) {
 
       const { error: payoutUpdateError } = await supabase
         .from("payouts")
-        .update({
-          status: "released",
-          stripe_transfer_id: transfer.id,
-        })
+        .update({ status: "released", stripe_transfer_id: transfer.id })
         .eq("check_in_id", checkIn.id);
 
       if (payoutUpdateError) {
@@ -427,7 +445,18 @@ export async function POST(request: NextRequest) {
       longest_streak: newLongestStreak,
       last_check_in_date: today,
       ...(streakSaveDelta !== 0 && {
-        streak_saves_available: profile.streak_saves_available + streakSaveDelta,
+        streak_saves_available:
+          profile.streak_saves_available + streakSaveDelta,
+      }),
+      ...(shortModePassEarned - (short_mode_pass_used ? 1 : 0) !== 0 && {
+        short_mode_passes:
+          (profile.short_mode_passes ?? 0) +
+          shortModePassEarned -
+          (short_mode_pass_used ? 1 : 0),
+      }),
+      ...(freezeDayEarned > 0 && {
+        freeze_days_available:
+          (profile.freeze_days_available ?? 0) + freezeDayEarned,
       }),
     })
     .eq("id", user.id);
@@ -462,6 +491,8 @@ export async function POST(request: NextRequest) {
     group_change_summary: groupChangeSummary,
     streak_reset: streakReset,
     streak_save_used: streakSaveUsed,
-    streak_save_earned: streakSaveEarned,
+    streak_save_earned: streakSaveEarned || streakSaveFromMilestone > 0,
+    short_mode_pass_earned: shortModePassEarned > 0,
+    freeze_day_earned: freezeDayEarned > 0,
   });
 }

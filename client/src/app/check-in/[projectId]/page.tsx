@@ -38,7 +38,7 @@ export default async function CheckInPage({ params }: PageParams) {
 
   const { data: profile, error: profileError } = await supabase
     .from("users")
-    .select("level, timezone")
+    .select("level, timezone, short_mode_passes, freeze_days_available")
     .eq("id", user.id)
     .single();
 
@@ -65,6 +65,8 @@ export default async function CheckInPage({ params }: PageParams) {
       mode={mode}
       canUseVoice={level >= 31}
       canUseMystery={level >= 31}
+      shortModePasses={profile?.short_mode_passes ?? 0}
+      freezeDaysAvailable={profile?.freeze_days_available ?? 0}
     />
   );
 }
