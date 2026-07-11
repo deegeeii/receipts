@@ -9,7 +9,6 @@ type RouteParams = {
 };
 
 // ── HANDLER ───────────────────────────────────────────────────────────────────
-// POST /api/projects/[projectId]/close — complete or cancel a project, release remaining balance
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { projectId } = await params;
 
@@ -63,32 +62,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   const remainingBalance = project.deposit_amount - totalReleased;
 
-  if (remainingBalance <= 0) {
-    const { error: statusError } = await supabase
-      .from("projects")
-      .update({
-        status: action === "complete" ? "completed" : "cancelled",
-        ...(action === "complete"
-          ? { completed_at: new Date().toISOString() }
-          : { cancelled_at: new Date().toISOString() }),
-      })
-      .eq("id", projectId);
-
-    if (statusError) {
-      console.error("close: project status update failed", statusError);
-      return NextResponse.json({ error: statusError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ status: action === "complete" ? "completed" : "cancelled" });
-  }
-
   const { data: profile } = await supabase
     .from("users")
     .select("stripe_account_id")
     .eq("id", user.id)
     .single();
 
-  // 10% penalty on remaining balance if cancelling early
   const transferAmount =
     action === "cancel"
       ? Math.floor(remainingBalance * 0.9)
@@ -107,11 +86,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
       });
     } catch (transferError) {
-      console.error("close: stripe transfer failed", transferError);
-      return NextResponse.json(
-        { error: "Transfer failed. Contact support." },
-        { status: 502 }
-      );
+      console.error("close: stripe transfer failed — needs manual reconciliation", transferError);
     }
   }
 
