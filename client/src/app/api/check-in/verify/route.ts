@@ -1,3 +1,4 @@
+/// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { anthropic } from "@/lib/anthropic/client";
 import { calculateXp } from "@/lib/xp/calculateXp";
@@ -7,7 +8,7 @@ import { formatTaskList } from "@/lib/ai/formatTaskList";
 import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
 import { stripe } from "@/lib/stripe/server";
 
-
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
 }
@@ -24,7 +25,7 @@ function getPrevWorkDay(dateString: string, workDays: number[]): string | null {
   return null;
 }
 
-// POST /api/check-in/verify — AI-verify a check-in, award XP, update streak, log payout
+// ── HANDLER ───────────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
 
@@ -39,8 +40,11 @@ export async function POST(request: NextRequest) {
   const {
     project_id,
     receipt_text,
-    ai_question,
-    ai_response,
+    ai_question = "",
+    ai_response = "",
+    ai_question2 = "",
+    ai_response2 = "",
+    mystery_format = "",
     mode = "receipt",
   } = await request.json();
 
@@ -101,13 +105,12 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: profile } = await supabase
-  .from("users")
-  .select(
-    "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id"
-  )
-  .eq("id", user.id)
-  .single();
-
+    .from("users")
+    .select(
+      "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id"
+    )
+    .eq("id", user.id)
+    .single();
 
   if (!profile) {
     console.error("verify: profile not found", { user_id: user.id });
@@ -142,23 +145,23 @@ export async function POST(request: NextRequest) {
     streakDays: newStreak,
   });
 
-  // weekly review XP multiplier: 5/5 days = 1.5x, 4/5 = 1.2x, else no bonus
   let xpMultiplier = 1.0;
   if (isReviewMode) {
     if (recentCheckInCount >= 5) xpMultiplier = 1.5;
     else if (recentCheckInCount >= 4) xpMultiplier = 1.2;
+  } else if (mode === "heavy_day") {
+    xpMultiplier = 1.25;
+  } else if (mode === "mystery_door") {
+    xpMultiplier = 1.15;
   }
 
   const xpEarned = Math.round(baseXpEarned * xpMultiplier);
-
   const newXp = profile.xp + xpEarned;
   const newLevel = getLevelForXp(newXp);
   const leveledUp = newLevel > profile.level;
   const groupChanged =
     leveledUp && getLevelGroup(newLevel) !== getLevelGroup(profile.level);
 
-  // weekly_review (done during off-day window) earns a streak save token
-  // pending_review (overdue, done on a work day) does not
   const streakSaveEarned = mode === "weekly_review";
   const streakSaveDelta = (streakSaveEarned ? 1 : 0) - (streakSaveUsed ? 1 : 0);
 
@@ -167,9 +170,80 @@ export async function POST(request: NextRequest) {
       ? `${formatCents(project.daily_payout)} released. Now let's see today's receipt.`
       : `${formatCents(project.daily_payout)} released. See you tomorrow.`;
 
+  // ── AI CLOSING MESSAGE ─────────────────────────────────────────────────────
+  const MYSTERY_FORMAT_LABELS: Record<string, string> = {
+    timed_write: "a timed free-write",
+    ai_quiz: "a three-question quiz",
+    one_word_expand: "a one-word expand",
+    gut_check: "a gut check rating",
+    draw_a_scene: "a scene description",
+  };
+
   let systemPrompt: string;
 
-  if (isReviewMode) {
+  if (mode === "mystery_door") {
+    const formatLabel = MYSTERY_FORMAT_LABELS[mystery_format] ?? "a mystery format";
+    systemPrompt = `You are the voice of Receipt — an accountability app where people put money on the line to get real work done.
+
+    Today someone went through the Mystery Door and completed ${formatLabel}. Close out this check-in.
+
+    Rules:
+    - Reference something specific from what they wrote. Show you actually read it.
+    - Acknowledge that they chose the harder, more interesting path today.
+    - One to two sentences, then the closing line.
+    - End the message with exactly this line on its own: "${closingLine}"
+    - Tone: curious, sharp, like someone who's impressed they took the door.
+    - No corporate language. Never say "verification complete."
+    - Respond with ONLY the closing message.
+
+    What they submitted: ${receipt_text}
+
+    Project roadmap:
+    ${roadmap}
+    ${completedTodayLine}`;
+
+  } else if (mode === "light_day") {
+    systemPrompt = `You are the voice of Receipt — an accountability app where people put money on the line to get real work done.
+
+    Someone just logged a quick check-in on a light day. Acknowledge what they did in one warm, specific sentence — then end with exactly this line on its own: "${closingLine}"
+
+    Rules:
+    - Reference something concrete from their receipt. Show you actually read it.
+    - One sentence of acknowledgment, then the closing line. Nothing else.
+    - Tone: warm, direct. No corporate language.
+    - Respond with ONLY the closing message.
+
+    What they did today: ${receipt_text}
+
+    Project roadmap:
+    ${roadmap}
+    ${completedTodayLine}`;
+
+  } else if (mode === "heavy_day") {
+    systemPrompt = `You are the voice of Receipt — an accountability app where people put money on the line to get real work done.
+
+    Today was this person's Peak Day — their most important work day of the week. They dropped a full receipt and answered two deep questions. Close out the day.
+
+    Rules:
+    - Reference something specific from their receipt AND weave in something from their answers.
+    - Acknowledge the depth — this was a heavy day and they showed up for it.
+    - Two to three sentences.
+    - End the message with exactly this line on its own: "${closingLine}"
+    - Tone: like a mentor who watched you grind through your hardest day and actually noticed.
+    - No corporate language. Never say "verification complete."
+    - Respond with ONLY the closing message.
+
+    What they did today: ${receipt_text}
+    Question 1: ${ai_question}
+    Their answer: ${ai_response}
+    Question 2: ${ai_question2}
+    Their answer: ${ai_response2}
+
+    Project roadmap:
+    ${roadmap}
+    ${completedTodayLine}`;
+
+  } else if (isReviewMode) {
     systemPrompt = `You are the voice of Receipt — an accountability app where people put money on the line to get real work done.
 
     Today is the weekly review. Someone just completed their review: they wrote a week-in-review receipt and answered a deep reflection question. Close out the week.
@@ -192,6 +266,7 @@ export async function POST(request: NextRequest) {
 
     Project roadmap:
     ${roadmap}`;
+
   } else {
     systemPrompt = `You are the voice of Receipt — an accountability app where people put money on the line to get real work done.
 
@@ -208,6 +283,7 @@ export async function POST(request: NextRequest) {
 
     What they did today: ${receipt_text}
     The question you asked: ${ai_question}
+    Their answer: ${ai_response}
 
     Project roadmap:
     ${roadmap}
@@ -219,9 +295,16 @@ export async function POST(request: NextRequest) {
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 250,
+      max_tokens: 300,
       system: systemPrompt,
-      messages: [{ role: "user", content: ai_response }],
+      messages: [
+        {
+          role: "user",
+          content: mode === "light_day" || mode === "mystery_door"
+            ? receipt_text
+            : ai_response,
+        },
+      ],
     });
 
     closingMessage =
@@ -234,6 +317,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // ── GROUP CHANGE SUMMARY ───────────────────────────────────────────────────
   let groupChangeSummary = "";
 
   if (groupChanged) {
@@ -264,15 +348,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
-
+  // ── PERSIST ────────────────────────────────────────────────────────────────
   const { data: checkIn, error: checkInError } = await supabase
     .from("check_ins")
     .insert({
       project_id,
       user_id: user.id,
       receipt_text,
-      ai_question,
-      ai_response,
+      ai_question: ai_question || null,
+      ai_response: ai_response || null,
       verified: true,
       xp_earned: xpEarned,
       check_in_date: today,
@@ -326,10 +410,8 @@ export async function POST(request: NextRequest) {
       }
     } catch (transferError) {
       console.error("verify: stripe transfer failed", transferError);
-      // payout stays "pending" — will be retried once bank account is linked
     }
   }
-
 
   const { error: profileError } = await supabase
     .from("users")
@@ -362,6 +444,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── RESPONSE ───────────────────────────────────────────────────────────────
   return NextResponse.json({
     closing_message: closingMessage,
     payout_amount: project.daily_payout,
@@ -376,5 +459,4 @@ export async function POST(request: NextRequest) {
     streak_save_used: streakSaveUsed,
     streak_save_earned: streakSaveEarned,
   });
-  
 }

@@ -1,12 +1,15 @@
 import { getLevelGroup } from "@/lib/xp/levels";
 
+// ── TYPES ─────────────────────────────────────────────────────────────────────
 export type CheckInMode =
   | "receipt"
   | "weekly_review"
   | "pending_review"
-  | "rest_day";
+  | "rest_day"
+  | "light_day"
+  | "heavy_day";
 
-// getCurrentWorkWeekStart — find the most recent "first work day" on or before dateString
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function getCurrentWorkWeekStart(
   dateString: string,
   workDays: number[]
@@ -25,7 +28,7 @@ function getCurrentWorkWeekStart(
   return dateString;
 }
 
-// getCheckInMode — returns today's check-in mode based on level, schedule, and review state
+// ── MODE ──────────────────────────────────────────────────────────────────────
 export function getCheckInMode(
   level: number,
   dateString: string,
@@ -50,15 +53,17 @@ export function getCheckInMode(
       ? lastWeeklyReviewDate < currentWorkWeekStart
       : projectStartDate < currentWorkWeekStart);
 
-  if (reviewIsPending) {
-    return "pending_review";
-  }
+  if (reviewIsPending) return "pending_review";
 
   if (!isWorkDay) {
-    if (hasWeeklyReview && !reviewAlreadyDoneThisWeek) {
-      return "weekly_review";
-    }
+    if (hasWeeklyReview && !reviewAlreadyDoneThisWeek) return "weekly_review";
     return "rest_day";
+  }
+
+  // Junior+ (level 16+) gets tiered day types instead of plain receipt
+  if (level >= 16 && workDays.length > 0) {
+    const peakDay = Math.max(...workDays);
+    return todayDayOfWeek === peakDay ? "heavy_day" : "light_day";
   }
 
   return "receipt";

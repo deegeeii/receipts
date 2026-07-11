@@ -1,14 +1,16 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
 import { getCheckInMode } from "@/lib/checkIn/getCheckInMode";
 import CheckInFlow from "./_components/CheckInFlow";
 
+// ── TYPES ─────────────────────────────────────────────────────────────────────
 type PageParams = {
   params: Promise<{ projectId: string }>;
 };
 
-// CheckInPage — determines today's check-in mode and renders the flow
+// ── PAGE ──────────────────────────────────────────────────────────────────────
 export default async function CheckInPage({ params }: PageParams) {
   const { projectId } = await params;
 
@@ -44,11 +46,12 @@ export default async function CheckInPage({ params }: PageParams) {
     console.error("check-in: profile fetch failed", profileError);
   }
 
+  const level = profile?.level ?? 1;
   const today = getDateInTimezone(new Date(), profile?.timezone ?? "UTC");
   const workDays: number[] = project.work_days ?? [1, 2, 3, 4, 5];
 
   const mode = getCheckInMode(
-    profile?.level ?? 1,
+    level,
     today,
     workDays,
     project.last_weekly_review_date ?? null,
@@ -60,6 +63,8 @@ export default async function CheckInPage({ params }: PageParams) {
       projectId={project.id}
       projectTitle={project.title}
       mode={mode}
+      canUseVoice={level >= 31}
+      canUseMystery={level >= 31}
     />
   );
 }
