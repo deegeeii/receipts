@@ -8,6 +8,7 @@ import SetupPayoutsBanner from "./_components/SetupPayoutsBanner";
 import OverdueBanner from "./_components/OverdueBanner";
 import MissedDayModal from "./_components/MissedDayModal";
 import ProjectCard from "./_components/ProjectCard";
+import ReceiptDayBanner from "./_components/ReceiptDayBanner";
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 type Props = {
@@ -100,6 +101,14 @@ export default async function DashboardPage({ searchParams }: Props) {
     .eq("user_id", user.id)
     .gte("missed_date", monthStart);
 
+  const { data: receiptDayEvent } = await supabase
+    .from("app_events")
+    .select("active, multiplier, message")
+    .eq("event_type", "receipt_day")
+    .single();
+
+  const receiptDayActive = receiptDayEvent?.active ?? false;
+
   return (
     <main className="min-h-screen bg-[#0A0A0A] px-6 py-12">
       <MissedDayModal />
@@ -120,6 +129,13 @@ export default async function DashboardPage({ searchParams }: Props) {
             </p>
           )}
         </div>
+
+        {receiptDayActive && (
+          <ReceiptDayBanner
+            message={receiptDayEvent?.message ?? "Receipt Day is live."}
+            multiplier={receiptDayEvent?.multiplier ?? 2}
+          />
+        )}
 
         {!profile?.stripe_account_id && <SetupPayoutsBanner />}
 

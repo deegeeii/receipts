@@ -115,6 +115,18 @@ export async function POST(request: NextRequest) {
     .eq("id", user.id)
     .single();
 
+  const { data: receiptDayEvent } = await supabase
+    .from("app_events")
+    .select("active, multiplier")
+    .eq("event_type", "receipt_day")
+    .single();
+
+  const receiptDayMultiplier =
+    receiptDayEvent?.active ? (receiptDayEvent.multiplier ?? 2.0) : 1.0;
+
+  const payoutAmount = Math.round(project.daily_payout * receiptDayMultiplier);
+
+
   if (!profile) {
     console.error("verify: profile not found", { user_id: user.id });
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
@@ -414,6 +426,7 @@ export async function POST(request: NextRequest) {
     .select()
     .single();
 
+
   if (checkInError) {
     console.error("verify: check_ins insert failed", checkInError);
     return NextResponse.json({ error: checkInError.message }, { status: 500 });
@@ -425,7 +438,7 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       project_id,
       check_in_id: checkIn.id,
-      amount: project.daily_payout,
+      amount: payoutAmount,
       status: "pending",
     });
 
@@ -437,7 +450,7 @@ export async function POST(request: NextRequest) {
   if (profile.stripe_account_id) {
     try {
       const transfer = await stripe.transfers.create({
-        amount: project.daily_payout,
+        amount: payoutAmount,
         currency: "usd",
         destination: profile.stripe_account_id,
         metadata: {
@@ -505,7 +518,7 @@ export async function POST(request: NextRequest) {
   // ── RESPONSE ───────────────────────────────────────────────────────────────
   return NextResponse.json({
     closing_message: closingMessage,
-    payout_amount: project.daily_payout,
+    payout_amount: payoutAmount,
     xp_earned: xpEarned,
     xp_multiplier: xpMultiplier,
     new_level: newLevel,
