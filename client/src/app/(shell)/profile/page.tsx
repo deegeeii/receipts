@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getLevelGroup } from "@/lib/xp/levels";
 import PrivacyToggle from "../settings/privacy/_components/PrivacyToggle";
+import PayoutSettings from "./_components/PayoutSettings";
 
 // ── PAGE ──────────────────────────────────────────────────────────────────────
 export default async function ProfilePage() {
@@ -16,7 +17,7 @@ export default async function ProfilePage() {
 
   const { data: profile, error } = await supabase
     .from("users")
-    .select("name, level, xp, current_streak, longest_streak, profile_public")
+    .select("name, level, xp, current_streak, longest_streak, profile_public, stripe_account_id")
     .eq("id", user.id)
     .single();
 
@@ -65,6 +66,14 @@ export default async function ProfilePage() {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Payouts */}
+        <div className="flex flex-col gap-3">
+          <span className="text-xs text-[#6B6B6B] uppercase tracking-wide">
+            Payouts
+          </span>
+          <PayoutSettings isConnected={!!profile?.stripe_account_id} />
         </div>
 
         {/* Privacy + public link */}
