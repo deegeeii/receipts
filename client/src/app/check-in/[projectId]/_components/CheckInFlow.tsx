@@ -103,6 +103,9 @@ export default function CheckInFlow({
 
   const [shortModePassEarned, setShortModePassEarned] = useState(false);
   const [freezeDayEarned, setFreezeDayEarned] = useState(false);
+  const [buddyBonusXp, setBuddyBonusXp] = useState(0);
+  const [buddyMatchNames, setBuddyMatchNames] = useState<string[]>([]);
+
 
   // ── EFFECTS ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -141,6 +144,9 @@ export default function CheckInFlow({
     setFreezeDaysRemaining(freezeDaysAvailable);
     setShortModePassEarned(false);
     setFreezeDayEarned(false);
+    setBuddyBonusXp(0);
+    setBuddyMatchNames([]);
+
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
   }, [projectId]);
 
@@ -209,6 +215,9 @@ export default function CheckInFlow({
     setStreakReset(data.streak_reset ?? false);
     setShortModePassEarned(data.short_mode_pass_earned ?? false);
     setFreezeDayEarned(data.freeze_day_earned ?? false);
+    setBuddyBonusXp(data.buddy_bonus_xp ?? 0);
+    setBuddyMatchNames(data.buddy_match_names ?? []);
+
     setStage("done");
     setLoading(false);
 
@@ -402,6 +411,8 @@ export default function CheckInFlow({
     setStreakReset(data.streak_reset ?? false);
     setShortModePassEarned(data.short_mode_pass_earned ?? false);
     setFreezeDayEarned(data.freeze_day_earned ?? false);
+    setBuddyBonusXp(data.buddy_bonus_xp ?? 0);
+    setBuddyMatchNames(data.buddy_match_names ?? []);
     setStage("done");
     setLoading(false);
 
@@ -559,7 +570,7 @@ export default function CheckInFlow({
               <p className="text-xs text-[#C9A84C] uppercase tracking-widest">
                 Rank unlocked
               </p>
-              <h1 className="text-5xl font-bold text-[#F0EDEA]">
+              <h1 className="text-5xl font-bold text-[#F0EDEA] animate-rank-glow">
                 {levelGroup}
               </h1>
             </div>
@@ -1068,6 +1079,17 @@ export default function CheckInFlow({
                   )}
                 </div>
               )}
+                {buddyBonusXp > 0 && (
+                <div className="flex flex-col gap-1 w-full px-4 py-3 border border-[#C9A84C]/30 rounded-md">
+                  <p className="text-xs text-[#C9A84C]">
+                    +{buddyBonusXp} XP — crew checked in with you
+                  </p>
+                  <p className="text-xs text-[#6B6B6B]">
+                    {buddyMatchNames.join(", ")}
+                  </p>
+                </div>
+              )}
+
 
               {mode === "pending_review" ? (
                 <button
