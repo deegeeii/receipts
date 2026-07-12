@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Ideation", href: "/ideation" },
   { label: "Journal", href: "/journal" },
   { label: "Crew", href: "/crew" },
+  { label: "Profile", href: "/profile" },
 ];
 
 // ── COMPONENT ─────────────────────────────────────────────────────────────────
