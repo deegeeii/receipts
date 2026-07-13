@@ -1,6 +1,6 @@
-// ── IMPORTS ───────────────────────────────────────────────────────────────────
 "use client";
 
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -18,13 +18,20 @@ type ActiveProject = {
 };
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
-const NAV_ITEMS: NavItem[] = [
+const DESKTOP_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Projects", href: "/projects" },
   { label: "Ideation", href: "/ideation" },
   { label: "Journal", href: "/journal" },
   { label: "Crew", href: "/crew" },
   { label: "Profile", href: "/profile" },
+];
+
+const MOBILE_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Projects", href: "/projects" },
+  { label: "Ideation", href: "/ideation" },
+  { label: "Journal", href: "/journal" },
 ];
 
 // ── COMPONENT ─────────────────────────────────────────────────────────────────
@@ -49,9 +56,9 @@ export default function Sidebar() {
   }, [pathname]);
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
-  const navLinks = (
+  const desktopLinks = (
     <nav className="flex flex-col gap-1">
-      {NAV_ITEMS.map((item) => {
+      {DESKTOP_NAV_ITEMS.map((item) => {
         const isActive =
           item.href === "/dashboard"
             ? pathname === "/dashboard" || pathname.startsWith("/dashboard")
@@ -109,13 +116,13 @@ export default function Sidebar() {
         <span className="text-lg font-bold text-[#C9A84C] tracking-wide px-2">
           Receipt
         </span>
-        {navLinks}
+        {desktopLinks}
       </aside>
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0A0A0A] border-t border-[#1F1F1F] flex">
-        {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href;
+        {MOBILE_NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.label}

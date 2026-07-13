@@ -65,3 +65,10 @@ body {
 .animate-rank-glow {
   animation: rank-glow 1.4s ease-out 0.35s forwards;
 }
+
+/* Prevent iOS Safari from zooming on input focus */
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}

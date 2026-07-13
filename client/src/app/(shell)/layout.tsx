@@ -1,10 +1,11 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Sidebar from "./_components/Sidebar";
 import TimezoneSync from "./_components/TimezoneSync";
+import MobileHeader from "./_components/MobileHeader";
 
-
-// ShellLayout — wraps authenticated pages with the persistent sidebar
+// ── LAYOUT ────────────────────────────────────────────────────────────────────
 export default async function ShellLayout({
   children,
 }: {
@@ -23,12 +24,11 @@ export default async function ShellLayout({
   return (
     <div className="flex min-h-screen bg-[#0A0A0A]">
       <TimezoneSync />
+      <MobileHeader />
       <Sidebar />
-      <div className="flex-1 pb-16 md:pb-0">
+      <div className="flex-1 pb-16 pt-14 md:pt-0 md:pb-0">
         {children}
       </div>
-
     </div>
   );
-
 }
