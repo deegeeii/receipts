@@ -1,0 +1,15 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
+import { View, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+// ── SCREEN ────────────────────────────────────────────────────────────────────
+export default function IdeationScreen() {
+  return (
+    <SafeAreaView className="flex-1 bg-[#0A0A0A]">
+      <View className="flex-1 items-center justify-center">
+        <Text className="text-[#F0EDEA] text-lg font-bold">Ideation</Text>
+        <Text className="text-[#6B6B6B] text-sm mt-1">Coming in Slice E</Text>
+      </View>
+    </SafeAreaView>
+  );
+}
