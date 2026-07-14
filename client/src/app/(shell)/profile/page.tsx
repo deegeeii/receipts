@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { getLevelGroup } from "@/lib/xp/levels";
 import PrivacyToggle from "../settings/privacy/_components/PrivacyToggle";
 import PayoutSettings from "./_components/PayoutSettings";
+import SignOutButton from "./_components/SignOutButton";
+
 
 // ── PAGE ──────────────────────────────────────────────────────────────────────
 export default async function ProfilePage() {
@@ -86,6 +88,15 @@ export default async function ProfilePage() {
             profileUrl={profileUrl}
           />
         </div>
+
+        {/* Sign out */}
+        <div className="flex flex-col gap-3">
+          <span className="text-xs text-[#6B6B6B] uppercase tracking-wide">
+            Account
+          </span>
+          <SignOutButton />
+        </div>
+
 
       </div>
     </main>

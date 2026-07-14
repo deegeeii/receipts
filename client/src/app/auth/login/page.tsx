@@ -1,9 +1,14 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
+// ── PAGE ──────────────────────────────────────────────────────────────────────
 export default async function LoginPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (user) redirect("/dashboard");
 
@@ -21,21 +26,18 @@ export default async function LoginPage() {
         </div>
 
         <div className="w-full flex flex-col gap-4">
-          <form action="/auth/google" method="POST">
-            <button
-              type="submit"
-              className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide hover:bg-[#E5C97A] transition-colors"
-            >
-              I&apos;m in
-            </button>
-          </form>
-
-          <p className="text-center text-xs text-[#6B6B6B]">
-            or{" "}
-            <a href="/auth/email" className="text-[#C9A84C] hover:underline">
-              continue with email
-            </a>
-          </p>
+          <Link
+            href="/auth/email"
+            className="w-full py-4 bg-[#C9A84C] text-[#0A0A0A] font-semibold text-base rounded-md tracking-wide text-center hover:bg-[#E5C97A] transition-colors"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/auth/signup"
+            className="w-full py-4 border border-[#1F1F1F] text-[#F0EDEA] font-semibold text-base rounded-md tracking-wide text-center hover:border-[#C9A84C] transition-colors"
+          >
+            Create account
+          </Link>
         </div>
 
       </div>

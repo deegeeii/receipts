@@ -43,6 +43,14 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        const next = searchParams.get("next");
+
+        if (next === "/auth/reset-password") {
+          return NextResponse.redirect(
+            new URL("/auth/reset-password", process.env.NEXT_PUBLIC_APP_URL)
+          );
+        }
+
         const destination =
           profile && profile.onboarded ? "/dashboard" : "/onboarding";
 
