@@ -1,12 +1,36 @@
 // ── IMPORTS ───────────────────────────────────────────────────────────────────
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
+import { TouchableOpacity } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 // ── LAYOUT ────────────────────────────────────────────────────────────────────
 export default function TabsLayout() {
+  const router = useRouter();
+
+  function GearButton() {
+    return (
+      <TouchableOpacity
+        onPress={() => router.push("/settings")}
+        style={{ marginRight: 16 }}
+      >
+        <Ionicons
+          name="settings-outline"
+          size={22}
+          color="#6B6B6B"
+        />
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
+        headerShown: true,
+        headerStyle: { backgroundColor: "#0A0A0A" },
+        headerTintColor: "#F0EDEA",
+        headerTitleStyle: { fontWeight: "600" },
+        headerShadowVisible: false,
+        headerRight: () => <GearButton />,
         tabBarStyle: {
           backgroundColor: "#0A0A0A",
           borderTopColor: "#1F1F1F",

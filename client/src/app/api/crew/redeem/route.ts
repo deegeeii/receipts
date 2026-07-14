@@ -1,13 +1,27 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
-// POST /api/crew/redeem — redeem a buddy's invite code, creating a mutual buddy link
+// ── HANDLER ───────────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
 
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let db: any = supabase;
+
+  if (!user) {
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (token) {
+      const { data } = await supabaseAdmin.auth.getUser(token);
+      user = data.user ?? null;
+      if (user) db = supabaseAdmin;
+    }
+  }
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -22,13 +36,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase.rpc("redeem_buddy_code", {
+  const { data, error } = await db.rpc("redeem_buddy_code", {
     code: code.trim(),
   });
 
   if (error) {
     console.error("crew: redeem failed", error);
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json(
+      { error: error.message, details: error.code },
+      { status: 400 }
+    );
   }
 
   const buddy = data?.[0] ?? null;
