@@ -4,6 +4,8 @@ import { anthropic } from "@/lib/anthropic/client";
 import { NextRequest, NextResponse } from "next/server";
 import { formatTaskList } from "@/lib/ai/formatTaskList";
 import { getVoiceTone } from "@/lib/ai/getVoiceTone";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const MYSTERY_FORMATS = [
@@ -29,18 +31,32 @@ const MYSTERY_PROMPTS: Record<Exclude<MysteryFormat, "ai_quiz">, string> = {
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
 
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let db: any = supabase;
+
+  if (!user) {
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (token) {
+      const { data } = await supabaseAdmin.auth.getUser(token);
+      user = data.user ?? null;
+      if (user) db = supabaseAdmin;
+    }
+  }
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+
+
   const { project_id, receipt_text, mode = "receipt" } =
     await request.json();
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from("users")
     .select("ai_voice")
     .eq("id", user.id)
@@ -65,7 +81,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { data: project } = await supabase
+    const { data: project } = await db
       .from("projects")
       .select("title, good_day_description, hard_day_description")
       .eq("id", project_id)
@@ -77,7 +93,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const { data: recentCheckIns } = await supabase
+    const { data: recentCheckIns } = await db
       .from("check_ins")
       .select("check_in_date, receipt_text")
       .eq("project_id", project_id)
@@ -88,7 +104,7 @@ export async function POST(request: NextRequest) {
     const recentContext =
       recentCheckIns && recentCheckIns.length > 0
         ? recentCheckIns
-            .map((c) => `${c.check_in_date}: ${c.receipt_text}`)
+            .map((c: { check_in_date: string; receipt_text: string }) => `${c.check_in_date}: ${c.receipt_text}`)
             .join("\n")
         : "No prior check-ins.";
 
@@ -138,19 +154,19 @@ ${recentContext}`,
   }
 
   // Standard modes
-  const { data: project } = await supabase
+  const { data: project, error: projectError } = await db
     .from("projects")
     .select("title, good_day_description, hard_day_description")
     .eq("id", project_id)
     .eq("user_id", user.id)
     .single();
 
-  if (!project) {
-    console.error("question: project not found", { project_id, user_id: user.id });
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  if (projectError || !project) {
+    console.error("question: project lookup failed", { project_id, user_id: user.id, error: projectError?.message, code: projectError?.code });
+    return NextResponse.json({ error: "Project not found", details: projectError?.message ?? "no row" }, { status: 404 });
   }
 
-  const { data: tasks } = await supabase
+  const { data: tasks } = await db
     .from("project_tasks")
     .select("title, completed, completed_at")
     .eq("project_id", project_id)
@@ -189,7 +205,7 @@ ${recentContext}`,
     ${completedTodayLine}`;
 
   } else if (isReviewMode) {
-    const { data: recentCheckIns, error: checkInsError } = await supabase
+    const { data: recentCheckIns, error: checkInsError } = await db
       .from("check_ins")
       .select("check_in_date, receipt_text, ai_question, ai_response")
       .eq("project_id", project_id)
@@ -205,7 +221,7 @@ ${recentContext}`,
       recentCheckIns && recentCheckIns.length > 0
         ? recentCheckIns
             .map(
-              (c) =>
+              (c: { check_in_date: string; receipt_text: string; ai_question: string; ai_response: string }) =>
                 `${c.check_in_date}:\n  Receipt: ${c.receipt_text}\n  Question: ${c.ai_question}\n  Answer: ${c.ai_response}`
             )
             .join("\n\n")

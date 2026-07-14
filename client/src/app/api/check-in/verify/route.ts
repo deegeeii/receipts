@@ -8,6 +8,8 @@ import { formatTaskList } from "@/lib/ai/formatTaskList";
 import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
 import { getVoiceTone } from "@/lib/ai/getVoiceTone";
 import { stripe } from "@/lib/stripe/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function formatCents(cents: number): string {
@@ -30,13 +32,26 @@ function getPrevWorkDay(dateString: string, workDays: number[]): string | null {
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
 
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let db: any = supabase;
+
+  if (!user) {
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (token) {
+      const { data } = await supabaseAdmin.auth.getUser(token);
+      user = data.user ?? null;
+      if (user) db = supabaseAdmin;
+    }
+  }
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
 
   const {
     project_id,
@@ -53,7 +68,7 @@ export async function POST(request: NextRequest) {
   const mode = short_mode_pass_used ? "light_day" : rawMode;
   const isReviewMode = mode === "weekly_review" || mode === "pending_review";
 
-  const { data: project } = await supabase
+  const { data: project } = await db
     .from("projects")
     .select("deposit_amount, daily_payout, work_days")
     .eq("id", project_id)
@@ -65,7 +80,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const { data: tasks } = await supabase
+  const { data: tasks } = await db
     .from("project_tasks")
     .select("title, completed, completed_at")
     .eq("project_id", project_id)
@@ -82,7 +97,7 @@ export async function POST(request: NextRequest) {
   let recentCheckInCount = 0;
 
   if (isReviewMode) {
-    const { data: recentCheckIns, error: checkInsError } = await supabase
+    const { data: recentCheckIns, error: checkInsError } = await db
       .from("check_ins")
       .select("check_in_date, receipt_text, ai_question, ai_response")
       .eq("project_id", project_id)
@@ -107,7 +122,7 @@ export async function POST(request: NextRequest) {
         : "No prior check-ins this week.";
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from("users")
     .select(
       "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id, ai_voice, short_mode_passes, freeze_days_available"
@@ -115,7 +130,7 @@ export async function POST(request: NextRequest) {
     .eq("id", user.id)
     .single();
 
-  const { data: receiptDayEvent } = await supabase
+  const { data: receiptDayEvent } = await db
     .from("app_events")
     .select("active, multiplier")
     .eq("event_type", "receipt_day")
@@ -145,11 +160,11 @@ export async function POST(request: NextRequest) {
   let buddyBonusXp = 0;
   let buddyMatchNames: string[] = [];
 
-  const { data: myBuddies } = await supabase.rpc("get_my_buddies");
+  const { data: myBuddies } = await db.rpc("get_my_buddies");
   const buddyIds = (myBuddies ?? []).map((b: { id: string }) => b.id);
 
   if (buddyIds.length > 0) {
-    const { data: buddyCheckIns } = await supabase
+    const { data: buddyCheckIns } = await db
       .from("check_ins")
       .select("user_id")
       .eq("check_in_date", today)
@@ -381,7 +396,7 @@ export async function POST(request: NextRequest) {
   let groupChangeSummary = "";
 
   if (groupChanged) {
-    const { data: journeyCheckIns } = await supabase
+    const { data: journeyCheckIns } = await db
       .from("check_ins")
       .select("check_in_date, receipt_text")
       .eq("project_id", project_id)
@@ -411,7 +426,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── PERSIST ────────────────────────────────────────────────────────────────
-  const { data: checkIn, error: checkInError } = await supabase
+  const { data: checkIn, error: checkInError } = await db
     .from("check_ins")
     .insert({
       project_id,
@@ -432,7 +447,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: checkInError.message }, { status: 500 });
   }
 
-  const { error: payoutError } = await supabase
+  const { error: payoutError } = await db
     .from("payouts")
     .insert({
       user_id: user.id,
@@ -460,7 +475,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const { error: payoutUpdateError } = await supabase
+      const { error: payoutUpdateError } = await db
         .from("payouts")
         .update({ status: "released", stripe_transfer_id: transfer.id })
         .eq("check_in_id", checkIn.id);
@@ -473,7 +488,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const { error: profileError } = await supabase
+  const { error: profileError } = await db
     .from("users")
     .update({
       xp: newXp,
@@ -504,7 +519,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (isReviewMode) {
-    const { error: reviewError } = await supabase
+    const { error: reviewError } = await db
       .from("projects")
       .update({ last_weekly_review_date: today })
       .eq("id", project_id)

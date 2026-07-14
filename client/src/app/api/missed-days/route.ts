@@ -1,87 +1,74 @@
 // ── IMPORTS ───────────────────────────────────────────────────────────────────
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
 // ── HANDLER ───────────────────────────────────────────────────────────────────
-export async function GET(request: NextRequest) {
-  const secret = request.headers.get("authorization");
+export async function GET() {
+  const supabase = await createClient();
 
-  if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  const { data: activeProjects, error: projectsError } = await supabaseAdmin
-    .from("projects")
-    .select("id, user_id, work_days, start_date, missed_day_preference, default_charity")
-    .eq("status", "active")
-    .lte("start_date", today);
-
-  if (projectsError) {
-    console.error("cron/missed-days: projects fetch failed", projectsError);
-    return NextResponse.json({ error: projectsError.message }, { status: 500 });
-  }
-
-  const projects = activeProjects ?? [];
-
-  const yesterday = new Date();
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
-  const yesterdayDow = yesterday.getUTCDay();
-
-  const eligibleProjectIds = projects
-    .filter((p) => Array.isArray(p.work_days) && p.work_days.includes(yesterdayDow))
-    .map((p) => p.id);
-
-  if (eligibleProjectIds.length === 0) {
-    return NextResponse.json({ ok: true, missed: 0 });
-  }
-
-  const { data: checkIns } = await supabaseAdmin
-    .from("check_ins")
-    .select("project_id")
-    .in("project_id", eligibleProjectIds)
-    .eq("check_in_date", yesterdayStr);
-
-  const checkedInIds = new Set((checkIns ?? []).map((c) => c.project_id));
-
-  const missedProjects = projects.filter(
-    (p) =>
-      eligibleProjectIds.includes(p.id) &&
-      !checkedInIds.has(p.id)
-  );
-
-  if (missedProjects.length === 0) {
-    return NextResponse.json({ ok: true, missed: 0 });
-  }
-
-  const rows = missedProjects.map((p) => ({
-    project_id: p.id,
-    user_id: p.user_id,
-    missed_date: yesterdayStr,
-    ...(p.missed_day_preference
-      ? {
-          resolution: p.missed_day_preference,
-          ...(p.missed_day_preference === "donated" && p.default_charity
-            ? { charity: p.default_charity }
-            : {}),
-        }
-      : {}),
-  }));
-
-  const { error: insertError } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("missed_days")
-    .insert(rows)
-    .onConflict("project_id, missed_date")
-    .ignore();
+    .select("id, project_id, missed_date, projects(title)")
+    .eq("user_id", user.id)
+    .is("resolution", null)
+    .order("missed_date", { ascending: true });
 
-  if (insertError) {
-    console.error("cron/missed-days: insert failed", insertError);
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
+  if (error) {
+    console.error("missed-days GET: fetch failed", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  console.log(`cron/missed-days: inserted ${missedProjects.length} missed days for ${yesterdayStr}`);
+  return NextResponse.json({ missed_days: data ?? [] });
+}
 
-  return NextResponse.json({ ok: true, missed: missedProjects.length });
+export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { missed_day_id, resolution, charity } = await request.json();
+
+  if (!missed_day_id || !resolution) {
+    return NextResponse.json(
+      { error: "Missing missed_day_id or resolution" },
+      { status: 400 }
+    );
+  }
+
+  if (resolution !== "rollover" && resolution !== "donated") {
+    return NextResponse.json(
+      { error: "resolution must be rollover or donated" },
+      { status: 400 }
+    );
+  }
+
+  const { error } = await supabase
+    .from("missed_days")
+    .update({
+      resolution,
+      ...(resolution === "donated" && charity ? { charity } : {}),
+    })
+    .eq("id", missed_day_id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("missed-days POST: update failed", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }
