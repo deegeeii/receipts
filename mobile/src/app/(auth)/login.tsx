@@ -9,53 +9,29 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
-
-// ── TYPES ─────────────────────────────────────────────────────────────────────
-type Step = "email" | "code";
 
 // ── SCREEN ────────────────────────────────────────────────────────────────────
 export default function LoginScreen() {
   // ── STATE ─────────────────────────────────────────────────────────────────
-  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── HANDLERS ──────────────────────────────────────────────────────────────
-  async function handleSendCode() {
+  // ── HANDLER ───────────────────────────────────────────────────────────────
+  async function handleLogin() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
-      options: { shouldCreateUser: false },
+      password,
     });
 
     if (error) {
-      console.error("login: send OTP failed", error);
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
-    setStep("code");
-    setLoading(false);
-  }
-
-  async function handleVerifyCode() {
-    setLoading(true);
-    setError(null);
-
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: code.trim(),
-      type: "email",
-    });
-
-    if (error) {
-      console.error("login: verify OTP failed", error);
+      console.error("login: sign in failed", error);
       setError(error.message);
     }
 
@@ -76,66 +52,52 @@ export default function LoginScreen() {
               Receipt
             </Text>
             <Text className="text-2xl font-bold text-[#F0EDEA]">
-              {step === "email" ? "Welcome back" : "Check your email"}
+              Welcome back
             </Text>
-            {step === "code" && (
-              <Text className="text-sm text-[#6B6B6B]">
-                We sent a 6-digit code to {email}
-              </Text>
-            )}
           </View>
 
           <View className="gap-3">
-            {step === "email" ? (
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email"
-                placeholderTextColor="#6B6B6B"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                className="px-4 py-4 bg-[#111111] border border-[#1F1F1F] rounded-md text-[#F0EDEA] text-sm"
-              />
-            ) : (
-              <TextInput
-                value={code}
-                onChangeText={setCode}
-                placeholder="6-digit code"
-                placeholderTextColor="#6B6B6B"
-                keyboardType="number-pad"
-                maxLength={6}
-                autoFocus
-                className="px-4 py-4 bg-[#111111] border border-[#1F1F1F] rounded-md text-[#F0EDEA] text-sm tracking-widest text-center"
-              />
-            )}
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              placeholderTextColor="#6B6B6B"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              className="px-4 py-4 bg-[#111111] border border-[#1F1F1F] rounded-md text-[#F0EDEA] text-sm"
+            />
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Password"
+              placeholderTextColor="#6B6B6B"
+              secureTextEntry
+              className="px-4 py-4 bg-[#111111] border border-[#1F1F1F] rounded-md text-[#F0EDEA] text-sm"
+            />
             {error && (
               <Text className="text-sm text-[#7B2D2D]">{error}</Text>
             )}
           </View>
 
           <TouchableOpacity
-            onPress={step === "email" ? handleSendCode : handleVerifyCode}
-            disabled={loading || (step === "email" ? !email : code.length < 6)}
+            onPress={handleLogin}
+            disabled={loading || !email || !password}
             className="py-4 bg-[#C9A84C] rounded-md items-center disabled:opacity-40"
           >
             <Text className="text-[#0A0A0A] font-semibold text-base">
-              {loading
-                ? step === "email" ? "Sending…" : "Verifying…"
-                : step === "email" ? "Send code" : "Verify"}
+              {loading ? "Signing in…" : "Sign in"}
             </Text>
           </TouchableOpacity>
 
-          {step === "code" && (
-            <TouchableOpacity
-              onPress={() => { setStep("email"); setCode(""); setError(null); }}
-              className="items-center"
-            >
-              <Text className="text-sm text-[#6B6B6B]">
-                ← Use a different email
+          <View className="flex-row justify-center gap-2">
+            <Text className="text-sm text-[#6B6B6B]">No account?</Text>
+            <Link href="/(auth)/signup">
+              <Text className="text-sm text-[#C9A84C] font-semibold">
+                Sign up
               </Text>
-            </TouchableOpacity>
-          )}
+            </Link>
+          </View>
 
         </View>
       </KeyboardAvoidingView>
