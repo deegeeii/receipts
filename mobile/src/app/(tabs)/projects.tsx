@@ -106,20 +106,38 @@ export default function ProjectsScreen() {
         }
       >
 
-        <View className="gap-1">
-          <Text className="text-2xl font-bold text-[#F0EDEA]">
-            Your projects
-          </Text>
-          <Text className="text-sm text-[#6B6B6B]">
-            Everything you&apos;ve put on the line.
-          </Text>
+        <View className="flex-row justify-between items-center">
+          <View className="gap-1">
+            <Text className="text-2xl font-bold text-[#F0EDEA]">
+              Your projects
+            </Text>
+            <Text className="text-sm text-[#6B6B6B]">
+              Everything you've put on the line.
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => router.push("/create-project")}
+            className="px-4 py-2 border border-[#C9A84C] rounded-md"
+          >
+            <Text className="text-sm font-semibold text-[#C9A84C]">
+              + New
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {projects.length === 0 ? (
-          <View className="items-center py-10">
+          <View className="items-center py-10 gap-4">
             <Text className="text-sm text-[#6B6B6B] text-center">
               No projects yet. Time to put something on the line.
             </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/create-project")}
+              className="px-6 py-3 bg-[#C9A84C] rounded-md"
+            >
+              <Text className="text-sm font-semibold text-[#0A0A0A]">
+                Create your first project
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View className="gap-4">

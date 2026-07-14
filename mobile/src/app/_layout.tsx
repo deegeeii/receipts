@@ -2,9 +2,12 @@
 import { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { StripeProvider } from "@stripe/stripe-react-native";
 import { AuthProvider, useAuth } from "@/context/auth";
 import "@/global.css";
 
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+const STRIPE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
 // ── SPLASH ────────────────────────────────────────────────────────────────────
 SplashScreen.preventAutoHideAsync();
@@ -36,8 +39,10 @@ function RootNavigator() {
 // ── LAYOUT ────────────────────────────────────────────────────────────────────
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootNavigator />
-    </AuthProvider>
+    <StripeProvider publishableKey={STRIPE_KEY}>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
+    </StripeProvider>
   );
 }
