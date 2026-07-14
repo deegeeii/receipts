@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
 type RouteParams = {
@@ -10,9 +11,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   const supabase = await createClient();
 
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let db: any = supabase;
+
+  if (!user) {
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (token) {
+      const { data } = await supabaseAdmin.auth.getUser(token);
+      user = data.user ?? null;
+      if (user) db = supabaseAdmin;
+    }
+  }
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -27,7 +40,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  const { count, error: countError } = await supabase
+  const { count, error: countError } = await db
     .from("project_tasks")
     .select("id", { count: "exact", head: true })
     .eq("project_id", projectId);
@@ -37,7 +50,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: countError.message }, { status: 500 });
   }
 
-  const { data: task, error: taskError } = await supabase
+  const { data: task, error: taskError } = await db
     .from("project_tasks")
     .insert({
       project_id: projectId,

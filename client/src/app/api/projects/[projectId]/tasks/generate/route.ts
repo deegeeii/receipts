@@ -1,27 +1,42 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { anthropic } from "@/lib/anthropic/client";
 import { formatTaskList } from "@/lib/ai/formatTaskList";
 import { NextRequest, NextResponse } from "next/server";
 
+// ── TYPES ─────────────────────────────────────────────────────────────────────
 type RouteParams = {
   params: Promise<{ projectId: string }>;
 };
 
-// POST /api/projects/[projectId]/tasks/generate — AI suggests new roadmap steps for a project
+// ── HANDLER ───────────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { projectId } = await params;
 
   const supabase = await createClient();
 
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let db: any = supabase;
+
+  if (!user) {
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (token) {
+      const { data } = await supabaseAdmin.auth.getUser(token);
+      user = data.user ?? null;
+      if (user) db = supabaseAdmin;
+    }
+  }
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const { data: project, error: projectError } = await supabase
+  const { data: project, error: projectError } = await db
     .from("projects")
     .select("title, description, good_day_description, hard_day_description")
     .eq("id", projectId)
@@ -33,7 +48,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const { data: tasks, error: tasksError } = await supabase
+  const { data: tasks, error: tasksError } = await db
     .from("project_tasks")
     .select("title, completed, completed_at")
     .eq("project_id", projectId)
@@ -67,12 +82,7 @@ ${roadmap}`;
       model: "claude-sonnet-4-6",
       max_tokens: 300,
       system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: "Suggest new roadmap steps.",
-        },
-      ],
+      messages: [{ role: "user", content: "Suggest new roadmap steps." }],
     });
 
     const raw =

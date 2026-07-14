@@ -1,14 +1,28 @@
+// ── IMPORTS ───────────────────────────────────────────────────────────────────
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { anthropic } from "@/lib/anthropic/client";
 import { NextRequest, NextResponse } from "next/server";
 
-// POST /api/journal — submit a journal entry for a project, get a short AI reinforcement response
+// ── HANDLER ───────────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
 
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let db: any = supabase;
+
+  if (!user) {
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (token) {
+      const { data } = await supabaseAdmin.auth.getUser(token);
+      user = data.user ?? null;
+      if (user) db = supabaseAdmin;
+    }
+  }
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -23,7 +37,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: project, error: projectError } = await supabase
+  const { data: project, error: projectError } = await db
     .from("projects")
     .select("title, good_day_description, hard_day_description")
     .eq("id", project_id)
@@ -59,12 +73,7 @@ Their journal entry: ${entry_text}`;
       model: "claude-sonnet-4-6",
       max_tokens: 300,
       system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: entry_text,
-        },
-      ],
+      messages: [{ role: "user", content: entry_text }],
     });
 
     aiResponse =
@@ -77,7 +86,7 @@ Their journal entry: ${entry_text}`;
     );
   }
 
-  const { data: entry, error: entryError } = await supabase
+  const { data: entry, error: entryError } = await db
     .from("journal_entries")
     .insert({
       user_id: user.id,
