@@ -9,7 +9,7 @@ import { getDateInTimezone } from "@/lib/date/getDateInTimezone";
 import { getVoiceTone } from "@/lib/ai/getVoiceTone";
 import { stripe } from "@/lib/stripe/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-
+import { sendPushNotifications } from "@/lib/push/sendPushNotifications";
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function formatCents(cents: number): string {
@@ -51,7 +51,6 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-
 
   const {
     project_id,
@@ -125,7 +124,7 @@ export async function POST(request: NextRequest) {
   const { data: profile } = await db
     .from("users")
     .select(
-      "current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id, ai_voice, short_mode_passes, freeze_days_available"
+      "name, current_streak, longest_streak, xp, level, last_check_in_date, timezone, streak_saves_available, stripe_account_id, ai_voice, short_mode_passes, freeze_days_available"
     )
     .eq("id", user.id)
     .single();
@@ -140,7 +139,6 @@ export async function POST(request: NextRequest) {
     receiptDayEvent?.active ? (receiptDayEvent.multiplier ?? 2.0) : 1.0;
 
   const payoutAmount = Math.round(project.daily_payout * receiptDayMultiplier);
-
 
   if (!profile) {
     console.error("verify: profile not found", { user_id: user.id });
@@ -441,7 +439,6 @@ export async function POST(request: NextRequest) {
     .select()
     .single();
 
-
   if (checkInError) {
     console.error("verify: check_ins insert failed", checkInError);
     return NextResponse.json({ error: checkInError.message }, { status: 500 });
@@ -527,6 +524,29 @@ export async function POST(request: NextRequest) {
 
     if (reviewError) {
       console.error("verify: last_weekly_review_date update failed", reviewError);
+    }
+  }
+
+  // ── BUDDY PUSH NOTIFICATIONS ───────────────────────────────────────────────
+  if (buddyIds.length > 0) {
+    const { data: buddyProfiles } = await supabaseAdmin
+      .from("users")
+      .select("expo_push_token")
+      .in("id", buddyIds)
+      .not("expo_push_token", "is", null);
+
+    const senderName = profile.name ?? "Your buddy";
+
+    const messages = (buddyProfiles ?? [])
+      .filter((b: { expo_push_token: string | null }) => b.expo_push_token)
+      .map((b: { expo_push_token: string }) => ({
+        to: b.expo_push_token,
+        title: "Your buddy checked in",
+        body: `${senderName} just dropped their receipt. Your move.`,
+      }));
+
+    if (messages.length > 0) {
+      await sendPushNotifications(messages);
     }
   }
 

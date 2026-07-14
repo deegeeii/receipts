@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StripeProvider } from "@stripe/stripe-react-native";
 import { AuthProvider, useAuth } from "@/context/auth";
+import { registerForPushNotifications } from "@/lib/notifications";
 import "@/global.css";
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
@@ -28,6 +29,10 @@ function RootNavigator() {
       router.replace("/(auth)/login");
     } else if (session && inAuthGroup) {
       router.replace("/(tabs)");
+    }
+
+    if (session) {
+      registerForPushNotifications();
     }
   }, [session, loading, segments]);
 
